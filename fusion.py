@@ -113,21 +113,65 @@ class FusionModule(nn.Module, ModuleUtilsMixin):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+class Project(nn.Module):
+    def __init__(
+        self, 
+        text_embed_dim:int,
+        vision_embed_dim:int,
+        projection_dim:int=512,
+    ):
+        super(Project, self).__init__()
+        self.text_embed_dim = text_embed_dim
+        self.vision_embed_dim = vision_embed_dim
+        self.projection_dim = projection_dim
+        self.visual_projection = nn.Linear(vision_embed_dim, projection_dim, bias=False)
+        self.text_projection = nn.Linear(text_embed_dim, projection_dim, bias=False)
+
+    def forward(
+        self,
+        text_embeds_:torch.Tensor,
+        image_embeds_:torch.Tensor,
+    ):
+        text_embeds = self.text_projection(text_embeds_)
+        image_embeds = self.visual_projection(image_embeds_)
+        
+        # normalized features
+        text_embeds = text_embeds / text_embeds.norm(dim=-1, keepdim=True)
+        image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
+        
+        return image_embeds, text_embeds
+
 class Fusion(nn.Module):
     def __init__(
         self, 
-        text_pretrained_model_name_or_path:str, 
-        vision_pretrained_model_name_or_path:str,
-        config:Optional[BertConfig]=None, 
+        text_model:nn.Module,
+        vision_model:nn.Module,
+        fusion_config:Optional[BertConfig]=None, 
+        vision_model_type:str='transformer',
+        vision_output_dim:Optional[int]=None,  # ignored if vision_model_type is transformer
+        logit_scale_init_value:float=2.6592,  # logit_scale = 1 / temperature
+        projection_dim:int=512,
     ):
         super(Fusion, self).__init__()
         
-        self.encoder = VisionTextDualEncoderModel.from_vision_text_pretrained(
-            vision_pretrained_model_name_or_path,  
-            text_pretrained_model_name_or_path,
+        self.vision_model = vision_model
+        self.text_model = text_model
+        self.projection = Project(
+            text_embed_dim=text_model.config.hidden_size, 
+            vision_embed_dim=vision_output_dim, 
+            projection_dim=projection_dim, 
         )
-        self.fusion_module = FusionModule(config)
+        self.fusion_module = FusionModule(fusion_config)
+        self.vision_model_type = vision_model_type
+        self.vision_output_dim = vision_output_dim
+        self.projection_dim = projection_dim
+                
+        self.logit_scale_init_value = logit_scale_init_value
+        self.logit_scale = nn.Parameter(torch.ones([]) * logit_scale_init_value)
         
+        if self.vision_model_type != 'transformer':
+            assert vision_output_dim is not None, \
+                'Please provide vision_output_dim for non transformer vision models'
         
     def forward(
         self,
@@ -142,26 +186,35 @@ class Fusion(nn.Module):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], CLIPOutput]:
         
-        encoder_outputs: CLIPOutput = self.encoder(
-            input_ids=input_ids, 
-            pixel_values=pixel_values,
+        if self.vision_model_type == 'transformer':
+            vision_outputs = self.vision_model(
+                pixel_values,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+            image_embeds_raw = vision_outputs.last_hidden_state
+        elif self.vision_model_type == 'ae':
+            vision_outputs = self.vision_model(pixel_values)
+            image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
+        else: 
+            print(f'{self.vision_model_type} is not supported.')
+        
+        text_outputs = self.text_model(
+            input_ids=input_ids,
             attention_mask=attention_mask,
-            position_ids=position_ids,
-            return_loss=False,
             token_type_ids=token_type_ids,
+            position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True, 
+            return_dict=return_dict,
         )
+        text_embeds_raw = text_outputs.last_hidden_state
         
-        text_embeds_raw = encoder_outputs.text_model_output.last_hidden_state
-        # text_pooler_output = encoder_outputs.text_model_output.pooler_output
-        image_embeds_raw = encoder_outputs.vision_model_output.last_hidden_state
-        # vision_pooler_output = encoder_outputs.vision_model_output.pooler_output
-
-        text_seq_len, image_seq_len = text_embeds_raw.shape[1], image_embeds_raw.shape[1]
-        outputs = self.fusion_module(text_embeds_raw, image_embeds_raw)
+        image_embeds, text_embeds = self.projection(text_embeds_raw, image_embeds_raw)
+        outputs = self.fusion_module(text_embeds, image_embeds)
         
+        text_seq_len = text_embeds.shape[1]
         text_embeds = outputs.last_hidden_state[:, :text_seq_len, :]
         image_embeds = outputs.last_hidden_state[:, text_seq_len:, :]
         
@@ -170,8 +223,8 @@ class Fusion(nn.Module):
         text_embeds = text_embeds / text_embeds.norm(dim=-1, keepdim=True)
         
         # cosine similarity as logits
-        logit_scale = self.encoder.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds[:, 0, :], image_embeds[:, 0, :].t()) * logit_scale
+        logit_scale = self.logit_scale.exp()
+        logits_per_text = torch.matmul(text_embeds[:, 0, :], image_embeds[:, 0, :].t()) * logit_scale  # image embeds should have a [CLS] token no? 
         logits_per_image = logits_per_text.T
         
         loss = None
