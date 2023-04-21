@@ -147,8 +147,8 @@ class Fusion(nn.Module):
         text_model:nn.Module,
         vision_model:nn.Module,
         fusion_config:Optional[BertConfig]=None, 
-        vision_model_type:str='transformer',
-        vision_output_dim:Optional[int]=None,  # ignored if vision_model_type is transformer
+        vision_model_type:str='huggingface',
+        vision_output_dim:Optional[int]=None,  # ignored if vision_model_type is huggingface
         logit_scale_init_value:float=2.6592,  # logit_scale = 1 / temperature
         projection_dim:int=512,
     ):
@@ -186,7 +186,7 @@ class Fusion(nn.Module):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], CLIPOutput]:
         
-        if self.vision_model_type == 'transformer':
+        if self.vision_model_type == 'huggingface':
             vision_outputs = self.vision_model(
                 pixel_values,
                 output_attentions=output_attentions,
@@ -194,6 +194,8 @@ class Fusion(nn.Module):
                 return_dict=return_dict,
             )
             image_embeds_raw = vision_outputs.last_hidden_state
+        elif self.vision_model_type == 'timm':
+            image_embeds_raw = self.vision_model(pixel_values)
         elif self.vision_model_type == 'ae':
             vision_outputs = self.vision_model(pixel_values)
             image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
