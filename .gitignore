@@ -1,4 +1,5 @@
 *.pth
+weights/*
 
 # Byte-compiled / optimized / DLL files
 data/*
