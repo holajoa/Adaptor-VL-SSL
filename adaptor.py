@@ -15,10 +15,13 @@ from transformers.models.clip.modeling_clip import CLIPOutput
 from transformers.models.clip.modeling_clip import clip_loss
 
 
-class FusionModule(nn.Module, ModuleUtilsMixin):
-    def __init__(self, config:Optional[BertConfig]=None):
-        super(FusionModule, self).__init__()
-        self.config = config if config is not None else BertConfig()
+class AdaptorModule(nn.Module, ModuleUtilsMixin):
+    def __init__(self, config:Optional[BertConfig]=None, num_hidden_layers:int=2):
+        super(AdaptorModule, self).__init__()
+        if config is not None:
+            self.config = config 
+        else:
+            self.config = BertConfig(num_hidden_layers=num_hidden_layers)
         
         self.embeddings = lambda t, i: torch.cat([t, i], dim=1)
         self.encoder = BertEncoder(self.config)
@@ -141,18 +144,18 @@ class Project(nn.Module):
         
         return image_embeds, text_embeds
 
-class Fusion(nn.Module):
+class Adaptor(nn.Module):
     def __init__(
         self, 
         text_model:nn.Module,
         vision_model:nn.Module,
-        fusion_config:Optional[BertConfig]=None, 
+        adaptor_config:Optional[BertConfig]=None, 
         vision_model_type:str='huggingface',
         vision_output_dim:Optional[int]=None,  # ignored if vision_model_type is huggingface
         logit_scale_init_value:float=2.6592,  # logit_scale = 1 / temperature
         projection_dim:int=512,
     ):
-        super(Fusion, self).__init__()
+        super(Adaptor, self).__init__()
         
         self.vision_model = vision_model
         self.text_model = text_model
@@ -161,7 +164,7 @@ class Fusion(nn.Module):
             vision_embed_dim=vision_output_dim, 
             projection_dim=projection_dim, 
         )
-        self.fusion_module = FusionModule(fusion_config)
+        self.adaptor_module = AdaptorModule(adaptor_config)
         self.vision_model_type = vision_model_type
         self.vision_output_dim = vision_output_dim
         self.projection_dim = projection_dim
@@ -214,7 +217,7 @@ class Fusion(nn.Module):
         text_embeds_raw = text_outputs.last_hidden_state
         
         image_embeds, text_embeds = self.projection(text_embeds_raw, image_embeds_raw)
-        outputs = self.fusion_module(text_embeds, image_embeds)
+        outputs = self.adaptor_module(text_embeds, image_embeds)
         
         text_seq_len = text_embeds.shape[1]
         text_embeds = outputs.last_hidden_state[:, :text_seq_len, :]
