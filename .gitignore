@@ -1,5 +1,6 @@
 *.pth
 weights/*
+events.out.*
 
 # Byte-compiled / optimized / DLL files
 data/*

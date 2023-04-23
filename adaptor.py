@@ -40,6 +40,7 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
+        **kwargs, 
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         
 
@@ -182,11 +183,12 @@ class Adaptor(nn.Module):
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        return_loss: Optional[bool] = None,
+        return_loss: Optional[bool] = True,
         token_type_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
+        **kwargs, 
     ) -> Union[Tuple[torch.Tensor], CLIPOutput]:
         
         if self.vision_model_type == 'huggingface':
