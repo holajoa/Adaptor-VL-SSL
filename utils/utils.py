@@ -3,6 +3,7 @@ import timm
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader 
+from models.adaptor import Adaptor
 
 from tqdm import tqdm
 import os
@@ -16,7 +17,7 @@ def load_timm_model(model_name='swin_base_patch4_window7_224', retain_head=False
         return nn.Sequential(*list(model.children())[:-2])
     return model
 
-def freeze_encoder(model):
+def freeze_encoder(model:Adaptor):
     for encoder in [model.text_model, model.vision_model]:
         for param in encoder.parameters():
             param.requires_grad = False

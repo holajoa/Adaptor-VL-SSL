@@ -18,14 +18,23 @@ import logging
 
 
 class AdaptorModule(nn.Module, ModuleUtilsMixin):
-    def __init__(self, config:Optional[BertConfig]=None, num_hidden_layers:int=2):
+    def __init__(
+        self, 
+        config:Optional[BertConfig]=None, 
+        num_hidden_layers:int=2, 
+        add_vision_cls_token:bool=False, 
+    ):
         super(AdaptorModule, self).__init__()
         if config is not None:
             self.config = config 
         else:
             self.config = BertConfig(num_hidden_layers=num_hidden_layers)
         
-        self.embeddings = lambda t, i: torch.cat([t, i], dim=1)
+        if add_vision_cls_token:
+            self.cls_token = nn.Parameter(torch.zeros((1, self.config.hidden_size)))
+            self.embeddings = lambda t, i: torch.cat([t, self.cls_token.repeat(t.size(0), 1, 1), i], dim=1)
+        else:
+            self.embeddings = lambda t, i: torch.cat([t, i], dim=1)
         self.encoder = BertEncoder(self.config)
         self.pooler = BertPooler(self.config)
 
@@ -157,6 +166,8 @@ class Adaptor(nn.Module):
         vision_output_dim:Optional[int]=None,  # ignored if vision_model_type is huggingface
         logit_scale_init_value:float=2.6592,  # logit_scale = 1 / temperature
         projection_dim:int=512,
+        num_hidden_layers:int=2,
+        add_cls_token:bool=False,
     ):
         super(Adaptor, self).__init__()
         
@@ -167,7 +178,7 @@ class Adaptor(nn.Module):
             vision_embed_dim=vision_output_dim, 
             projection_dim=projection_dim, 
         )
-        self.adaptor_module = AdaptorModule(adaptor_config)
+        self.adaptor_module = AdaptorModule(adaptor_config, num_hidden_layers, add_cls_token)
         self.vision_model_type = vision_model_type
         self.vision_output_dim = vision_output_dim
         self.projection_dim = projection_dim

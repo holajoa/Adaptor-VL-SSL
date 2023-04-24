@@ -17,6 +17,13 @@ from utils.utils import (
 )
 # from utils.dataset_utils import ae_image_processor, timm_image_processor
 
+from utils.dataset_utils import (
+    pickle_dataset, 
+    VISION_MODEL_TYPE_2_DATA_TRANSFORM, 
+)
+
+import logging
+
 from mgca.datasets.transforms import DataTransforms
 from datasets.dataset import (
     MultimodalPretrainingDatasetForAdaptor, 
@@ -31,30 +38,47 @@ num_workers = 16
 data_pct = 0.01
 crop_size = 224
 
-# Load daatasets
-train_dataset = MultimodalPretrainingDatasetForAdaptor(
-    split='train', 
-    transform=DataTransforms(True, crop_size), 
-    data_pct=data_pct, 
-)
-
-val_dataset = MultimodalPretrainingDatasetForAdaptor(
-    split='valid', 
-    transform=DataTransforms(False, crop_size), 
-    data_pct=data_pct, 
-)
-test_dataset = MultimodalPretrainingDatasetForAdaptor(
-    split='test', 
-    transform=DataTransforms(False, crop_size), 
-    data_pct=data_pct, 
-)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+logging.info(f'Using device: {device}')
+print(f'Using device: {device}')
 
 
 # Load pretrained models
 vision_model = load_timm_model('swin_base_patch4_window7_224', pretrained=True, retain_head=False)
+vision_model_type = 'timm'
 
 text_pretrained = "./weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint"
 text_model = BertModel.from_pretrained(text_pretrained)
+
+### Load dataset
+data_transforms = VISION_MODEL_TYPE_2_DATA_TRANSFORM[vision_model_type]
+
+train_dataset_pkl = f'saved_datasets/train_dataset_{vision_model_type}.pkl'
+val_dataset_pkl = f'saved_datasets/val_dataset_{vision_model_type}.pkl'
+test_dataset_pkl = f'saved_datasets/test_dataset_{vision_model_type}.pkl'
+
+train_dataset = pickle_dataset(
+    train_dataset_pkl, 
+    split='train', 
+    transform=data_transforms(True, crop_size), 
+    data_pct=data_pct, 
+    # force_rebuild=True, 
+)
+val_dataset = pickle_dataset(
+    val_dataset_pkl,
+    split='valid',
+    transform=data_transforms(False, crop_size),
+    data_pct=data_pct, 
+    # force_rebuild=True, 
+)
+
+test_dataset = pickle_dataset(
+    test_dataset_pkl,
+    split='test',
+    transform=data_transforms(False, crop_size),
+    data_pct=data_pct, 
+    # force_rebuild=True, 
+)
 
 # Get dataloaders
 train_dataloader = get_dataloader(

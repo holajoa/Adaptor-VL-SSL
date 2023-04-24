@@ -40,7 +40,7 @@ class MultimodalPretrainingDatasetForAdaptor(MultimodalPretrainingDataset):
         else:
             with open(filepath, "rb") as f:
                 path2sent = pickle.load(f)
-
+    
         # filter studies to use for current split
         filenames = []
         for row in tqdm(self.df.itertuples()):
