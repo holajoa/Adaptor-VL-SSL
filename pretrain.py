@@ -8,20 +8,19 @@ from transformers import AutoTokenizer
 from transformers import BertModel, AutoModel, ViTImageProcessor
 
 import torchxrayvision as xrv
-from adaptor import Adaptor
-from utils import load_timm_model, freeze_encoder
-
-from image_processor import ae_image_processor, timm_image_processor
+from models.adaptor import Adaptor
+from utils.utils import load_timm_model, freeze_encoder
+from utils.dataset_utils import ae_image_processor, timm_image_processor
 
 import skimage
 
 from transformers import TrainingArguments, Trainer
 
-from mgca.datasets.pretrain_dataset import MultimodalPretrainingDataset, multimodal_collate_fn
-from mgca.datasets.data_module import DataModule
+# from mgca.datasets.pretrain_dataset import MultimodalPretrainingDataset, multimodal_collate_fn
+from datasets.dataset import MultimodalPretrainingDatasetForAdaptor, multimodal_collator
 from mgca.datasets.classification_dataset import MIMICImageDataset
-
 from mgca.datasets.transforms import DataTransforms
+
 
 def multimodal_collator(*args, **kwargs):
     d = multimodal_collate_fn(*args, **kwargs)
@@ -30,20 +29,10 @@ def multimodal_collator(*args, **kwargs):
     return d
 
 seed = 1117
-batch_size = 48
+batch_size = 32
 num_workers = 16
 data_pct = 0.01
 crop_size = 224
-
-datamodule = DataModule(
-    dataset=MultimodalPretrainingDataset,
-    collate_fn=None, 
-    transforms=DataTransforms, 
-    data_pct=data_pct, 
-    batch_size=batch_size, 
-    num_workers=num_workers,
-    crop_size=224, 
-)
 
 train_dataset = MultimodalPretrainingDataset(
     split='train', 

@@ -14,6 +14,8 @@ from transformers.models.clip.modeling_clip import CLIPOutput
 
 from transformers.models.clip.modeling_clip import clip_loss
 
+import logging
+
 
 class AdaptorModule(nn.Module, ModuleUtilsMixin):
     def __init__(self, config:Optional[BertConfig]=None, num_hidden_layers:int=2):
@@ -181,6 +183,8 @@ class Adaptor(nn.Module):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        image_embeds_raw: Optional[torch.FloatTensor] = None, 
+        text_embeds_raw: Optional[torch.FloatTensor] = None, 
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = True,
@@ -190,33 +194,42 @@ class Adaptor(nn.Module):
         return_dict: Optional[bool] = True,
         **kwargs, 
     ) -> Union[Tuple[torch.Tensor], CLIPOutput]:
+        if image_embeds_raw is None:
+            assert pixel_values is not None, \
+                "Must pass pixel_values if no precomputed image_embeds_raw is provided."
+            if self.vision_model_type == 'huggingface':
+                vision_outputs = self.vision_model(
+                    pixel_values,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+                image_embeds_raw = vision_outputs.last_hidden_state
+            elif self.vision_model_type == 'timm':
+                image_embeds_raw = self.vision_model(pixel_values)
+            elif self.vision_model_type == 'ae':
+                vision_outputs = self.vision_model(pixel_values)
+                image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
+            else: 
+                logging.error(f'{self.vision_model_type} is not supported.')
+        else:
+            logging.info('Using precomputed image_embeds_raw.')
         
-        if self.vision_model_type == 'huggingface':
-            vision_outputs = self.vision_model(
-                pixel_values,
+        if text_embeds_raw is None:
+            assert input_ids is not None, \
+                "Must pass input_ids if no precomputed text_embeds_raw is provided."
+            text_outputs = self.text_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                position_ids=position_ids,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            image_embeds_raw = vision_outputs.last_hidden_state
-        elif self.vision_model_type == 'timm':
-            image_embeds_raw = self.vision_model(pixel_values)
-        elif self.vision_model_type == 'ae':
-            vision_outputs = self.vision_model(pixel_values)
-            image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
-        else: 
-            print(f'{self.vision_model_type} is not supported.')
-        
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        text_embeds_raw = text_outputs.last_hidden_state
+            text_embeds_raw = text_outputs.last_hidden_state
+        else:
+            logging.info('Using precomputed text_embeds_raw.')
         
         image_embeds, text_embeds = self.projection(text_embeds_raw, image_embeds_raw)
         outputs = self.adaptor_module(text_embeds, image_embeds)
