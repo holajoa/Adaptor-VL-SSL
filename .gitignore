@@ -2,6 +2,7 @@
 weights/*
 events.out.*
 saved_embeddings/*
+*.out
 
 # Byte-compiled / optimized / DLL files
 data/*
