@@ -33,7 +33,7 @@ from datasets.dataset import (
 import skimage
 
 seed = 1117
-batch_size = 64
+batch_size = 128
 num_workers = 16
 data_pct = 0.01
 crop_size = 224

@@ -53,26 +53,28 @@ def get_image_embeds_raw(
         os.makedirs(save_path)
     
     device = vision_model.device
-    for batch_idx, inputs in enumerate(tqdm(dataloader)):
-        for k, v in inputs.items():
-            inputs[k] = v.to(device=device)
-        if vision_model_type == 'huggingface':
-            vision_outputs = vision_model(
-                inputs.pixel_values,
-                output_attentions=False,
-                output_hidden_states=False,
-                return_dict=True,
-            )
-            image_embeds_raw = vision_outputs.last_hidden_state
-        elif vision_model_type == 'timm':
-            image_embeds_raw = vision_model(inputs['pixel_values'])
-        elif vision_model_type == 'ae':
-            vision_outputs = vision_model(inputs)
-            image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
-        else: 
-            raise ValueError(f'{vision_model_type} is not supported.')
-        pt_filename = f'{split}_{batch_idx}.pt'
-        torch.save(image_embeds_raw, os.path.join(save_path, pt_filename))
+    vision_model.eval()
+    with torch.no_grad():
+        for batch_idx, inputs in enumerate(tqdm(dataloader)):
+            for k, v in inputs.items():
+                inputs[k] = v.to(device=device)
+            if vision_model_type == 'huggingface':
+                vision_outputs = vision_model(
+                    inputs.pixel_values,
+                    output_attentions=False,
+                    output_hidden_states=False,
+                    return_dict=True,
+                )
+                image_embeds_raw = vision_outputs.last_hidden_state
+            elif vision_model_type == 'timm':
+                image_embeds_raw = vision_model(inputs['pixel_values'])
+            elif vision_model_type == 'ae':
+                vision_outputs = vision_model(inputs)
+                image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
+            else: 
+                raise ValueError(f'{vision_model_type} is not supported.')
+            pt_filename = f'{split}_{batch_idx}.pt'
+            torch.save(image_embeds_raw, os.path.join(save_path, pt_filename))
         
 
 def get_text_embeds_raw(
@@ -90,17 +92,19 @@ def get_text_embeds_raw(
         os.makedirs(save_path)
         
     device = text_model.device
-    for batch_idx, inputs in enumerate(tqdm(dataloader)):
-        [inputs.pop(key, None) for key in removed_arguments]
-        for k, v in inputs.items():
-            inputs[k] = v.to(device=device)
-        text_outputs = text_model(
-            **inputs, 
-            output_attentions=False,
-            output_hidden_states=True,
-            return_dict=True,
-        )
-        text_embeds_raw = text_outputs.last_hidden_state
-        pt_filename = f'{split}_{batch_idx}.pt'
-        torch.save(text_embeds_raw, os.path.join(save_path, pt_filename))
+    text_model.eval()
+    with torch.no_grad():
+        for batch_idx, inputs in enumerate(tqdm(dataloader)):
+            [inputs.pop(key, None) for key in removed_arguments]
+            for k, v in inputs.items():
+                inputs[k] = v.to(device=device)
+            text_outputs = text_model(
+                **inputs, 
+                output_attentions=False,
+                output_hidden_states=True,
+                return_dict=True,
+            )
+            text_embeds_raw = text_outputs.last_hidden_state
+            pt_filename = f'{split}_{batch_idx}.pt'
+            torch.save(text_embeds_raw, os.path.join(save_path, pt_filename))
     
