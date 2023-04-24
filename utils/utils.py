@@ -9,6 +9,7 @@ from tqdm import tqdm
 import os
 
 from typing import List, Union, Tuple, Dict, Optional
+# import logging
 
 
 def load_timm_model(model_name='swin_base_patch4_window7_224', retain_head=False, pretrained=True):
@@ -51,7 +52,10 @@ def get_image_embeds_raw(
     if not os.path.exists(save_path):
         os.makedirs(save_path)
     
+    device = vision_model.device
     for batch_idx, inputs in enumerate(tqdm(dataloader)):
+        for k, v in inputs.items():
+            inputs[k] = v.to(device=device)
         if vision_model_type == 'huggingface':
             vision_outputs = vision_model(
                 inputs.pixel_values,
@@ -66,7 +70,7 @@ def get_image_embeds_raw(
             vision_outputs = vision_model(inputs)
             image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
         else: 
-            logging.error(f'{vision_model_type} is not supported.')
+            raise ValueError(f'{vision_model_type} is not supported.')
         pt_filename = f'{split}_{batch_idx}.pt'
         torch.save(image_embeds_raw, os.path.join(save_path, pt_filename))
         
@@ -84,9 +88,12 @@ def get_text_embeds_raw(
     save_path = os.path.join(save_path, split)
     if not os.path.exists(save_path):
         os.makedirs(save_path)
-
+        
+    device = text_model.device
     for batch_idx, inputs in enumerate(tqdm(dataloader)):
         [inputs.pop(key, None) for key in removed_arguments]
+        for k, v in inputs.items():
+            inputs[k] = v.to(device=device)
         text_outputs = text_model(
             **inputs, 
             output_attentions=False,

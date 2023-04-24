@@ -29,7 +29,7 @@ class AutoEncoderDataTransforms(object):
         if len(image.shape) >= 3:
             image = image[..., 0]
         elif len(image.shape) < 3:
-            logging.error("error, dimension lower than 2 for image")
+            raise ValueError("error, dimension lower than 2 for image")
 
         # Add color channel
         image = image[None, :, :]
@@ -89,9 +89,9 @@ def pickle_dataset(dataset_pkl, split, transform, data_pct, force_rebuild=False)
         )
         with open(dataset_pkl, "wb") as f:
             pickle.dump(dataset, f, protocol=2)
-            logging.info(f"Saved dataset to: {dataset_pkl}")
+            print(f"Saved dataset to: {dataset_pkl}")
     else:
-        logging.info(f'Loading dataset from: {dataset_pkl}')
+        print(f'Loading dataset from: {dataset_pkl}')
         with open(dataset_pkl, "rb") as f:
             dataset = pickle.load(f)
     

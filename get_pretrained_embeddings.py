@@ -33,7 +33,7 @@ from datasets.dataset import (
 import skimage
 
 seed = 1117
-batch_size = 32
+batch_size = 64
 num_workers = 16
 data_pct = 0.01
 crop_size = 224
@@ -45,10 +45,12 @@ print(f'Using device: {device}')
 
 # Load pretrained models
 vision_model = load_timm_model('swin_base_patch4_window7_224', pretrained=True, retain_head=False)
+vision_model.to(device)
 vision_model_type = 'timm'
 
 text_pretrained = "./weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint"
 text_model = BertModel.from_pretrained(text_pretrained)
+text_model.to(device)
 
 ### Load dataset
 data_transforms = VISION_MODEL_TYPE_2_DATA_TRANSFORM[vision_model_type]
