@@ -1,6 +1,9 @@
 *.pth
 weights/*
 events.out.*
+saved_embeddings*
+saved_datasets/*
+*.out
 
 # Byte-compiled / optimized / DLL files
 data/*

@@ -14,16 +14,27 @@ from transformers.models.clip.modeling_clip import CLIPOutput
 
 from transformers.models.clip.modeling_clip import clip_loss
 
+import logging
+
 
 class AdaptorModule(nn.Module, ModuleUtilsMixin):
-    def __init__(self, config:Optional[BertConfig]=None, num_hidden_layers:int=2):
+    def __init__(
+        self, 
+        config:Optional[BertConfig]=None, 
+        num_hidden_layers:int=2, 
+        add_vision_cls_token:bool=False, 
+    ):
         super(AdaptorModule, self).__init__()
         if config is not None:
             self.config = config 
         else:
             self.config = BertConfig(num_hidden_layers=num_hidden_layers)
         
-        self.embeddings = lambda t, i: torch.cat([t, i], dim=1)
+        if add_vision_cls_token:
+            self.cls_token = nn.Parameter(torch.zeros((1, self.config.hidden_size)))
+            self.embeddings = lambda t, i: torch.cat([t, self.cls_token.repeat(t.size(0), 1, 1), i], dim=1)
+        else:
+            self.embeddings = lambda t, i: torch.cat([t, i], dim=1)
         self.encoder = BertEncoder(self.config)
         self.pooler = BertPooler(self.config)
 
@@ -155,6 +166,8 @@ class Adaptor(nn.Module):
         vision_output_dim:Optional[int]=None,  # ignored if vision_model_type is huggingface
         logit_scale_init_value:float=2.6592,  # logit_scale = 1 / temperature
         projection_dim:int=512,
+        num_hidden_layers:int=2,
+        add_cls_token:bool=False,
     ):
         super(Adaptor, self).__init__()
         
@@ -165,7 +178,7 @@ class Adaptor(nn.Module):
             vision_embed_dim=vision_output_dim, 
             projection_dim=projection_dim, 
         )
-        self.adaptor_module = AdaptorModule(adaptor_config)
+        self.adaptor_module = AdaptorModule(adaptor_config, num_hidden_layers, add_cls_token)
         self.vision_model_type = vision_model_type
         self.vision_output_dim = vision_output_dim
         self.projection_dim = projection_dim
@@ -181,6 +194,8 @@ class Adaptor(nn.Module):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        image_embeds_raw: Optional[torch.FloatTensor] = None, 
+        text_embeds_raw: Optional[torch.FloatTensor] = None, 
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = True,
@@ -190,33 +205,42 @@ class Adaptor(nn.Module):
         return_dict: Optional[bool] = True,
         **kwargs, 
     ) -> Union[Tuple[torch.Tensor], CLIPOutput]:
+        if image_embeds_raw is None:
+            assert pixel_values is not None, \
+                "Must pass pixel_values if no precomputed image_embeds_raw is provided."
+            if self.vision_model_type == 'huggingface':
+                vision_outputs = self.vision_model(
+                    pixel_values,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+                image_embeds_raw = vision_outputs.last_hidden_state
+            elif self.vision_model_type == 'timm':
+                image_embeds_raw = self.vision_model(pixel_values)
+            elif self.vision_model_type == 'ae':
+                vision_outputs = self.vision_model(pixel_values)
+                image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
+            else: 
+                logging.error(f'{self.vision_model_type} is not supported.')
+        else:
+            logging.info('Using precomputed image_embeds_raw.')
         
-        if self.vision_model_type == 'huggingface':
-            vision_outputs = self.vision_model(
-                pixel_values,
+        if text_embeds_raw is None:
+            assert input_ids is not None, \
+                "Must pass input_ids if no precomputed text_embeds_raw is provided."
+            text_outputs = self.text_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                position_ids=position_ids,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            image_embeds_raw = vision_outputs.last_hidden_state
-        elif self.vision_model_type == 'timm':
-            image_embeds_raw = self.vision_model(pixel_values)
-        elif self.vision_model_type == 'ae':
-            vision_outputs = self.vision_model(pixel_values)
-            image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
-        else: 
-            print(f'{self.vision_model_type} is not supported.')
-        
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        text_embeds_raw = text_outputs.last_hidden_state
+            text_embeds_raw = text_outputs.last_hidden_state
+        else:
+            logging.info('Using precomputed text_embeds_raw.')
         
         image_embeds, text_embeds = self.projection(text_embeds_raw, image_embeds_raw)
         outputs = self.adaptor_module(text_embeds, image_embeds)

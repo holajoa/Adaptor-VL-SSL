@@ -8,108 +8,105 @@ from transformers import AutoTokenizer
 from transformers import BertModel, AutoModel, ViTImageProcessor
 
 import torchxrayvision as xrv
-from adaptor import Adaptor
-from utils import load_timm_model, freeze_encoder
-
-from image_processor import ae_image_processor, timm_image_processor
-
-import skimage
+from models.adaptor import Adaptor
+from models.configurations import (
+    TEXT_PRETRAINED_AVAILABLE,
+    VISION_PRETRAINED_AVAILABLE,
+    VISION_MODEL_TYPE_2_DATA_TRANSFORM,
+    VISION_MODEL_TYPE_2_VISION_OUTPUT_DIM, 
+)
+from utils.utils import load_timm_model, freeze_encoder
+from utils.dataset_utils import ae_image_processor, pickle_dataset
+from utils.model_utils import load_vision_model
 
 from transformers import TrainingArguments, Trainer
+from datasets.dataset import multimodal_collator
+import argparse 
 
-from mgca.datasets.pretrain_dataset import MultimodalPretrainingDataset, multimodal_collate_fn
-from mgca.datasets.data_module import DataModule
-from mgca.datasets.classification_dataset import MIMICImageDataset
 
-from mgca.datasets.transforms import DataTransforms
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('--vision_pretrained', type=str)
+parser.add_argument('--vision_model_type', type=str, help='Choose from [timm, ae, huggingface]')
+parser.add_argument('--text_pretrained', type=str, 
+                    help='Choose from [bert-base-uncased, dmis-lab/biobert-v1.1, '
+                    'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext, '
+                    'microsoft/BiomedVLP-CXR-BERT-general, '
+                    './weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint]')
+parser.add_argument('--batch_size', type=int, default=32)
 
-def multimodal_collator(*args, **kwargs):
-    d = multimodal_collate_fn(*args, **kwargs)
-    d['input_ids'] = d.pop('caption_ids')
-    d['pixel_values'] = d.pop('imgs')
-    return d
+parser.add_argument('--force_rebuild_dataset', action='store_true', help='Whether to force rebuild dataset, if not can load pickled file if available')
+parser.add_argument('--num_workers', type=int, default=16)
+parser.add_argument('--data_pct', type=float, default=0.01, help='percentage of data to use')
+parser.add_argument('--crop_size', type=int, default=224)
 
-seed = 1117
-batch_size = 48
-num_workers = 16
-data_pct = 0.01
-crop_size = 224
+parser.add_argument('--num_hidden_layers', type=int, default=1, help='number of transformer layers to use in adaptor')
+parser.add_argument('--projection_dim', type=int, default=768, help='dimension of projection head')
 
-datamodule = DataModule(
-    dataset=MultimodalPretrainingDataset,
-    collate_fn=None, 
-    transforms=DataTransforms, 
-    data_pct=data_pct, 
-    batch_size=batch_size, 
-    num_workers=num_workers,
-    crop_size=224, 
-)
+parser.add_argument('--lr', type=float, default=1e-4)
+parser.add_argument('--num_train_epochs', type=int, default=1)
 
-train_dataset = MultimodalPretrainingDataset(
-    split='train', 
-    transform=DataTransforms(True, crop_size), 
-    data_pct=data_pct
-)
+parser.add_argument('--seed', type=int, default=1117)
 
-val_dataset = MultimodalPretrainingDataset(
-    split='valid', 
-    transform=DataTransforms(False, crop_size), 
-    data_pct=data_pct
-)
+args = parser.parse_args()
 
-text_pretrained_available = [
-    "bert-base-uncased", 
-    "dmis-lab/biobert-v1.1", 
-    "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext", 
-    "microsoft/BiomedVLP-CXR-BERT-general", 
-]
+torch.manual_seed(args.seed)
 
 ### Load vision model
-# vision_model = xrv.autoencoders.ResNetAE(weights="101-elastic")
-vision_model = load_timm_model('swin_base_patch4_window7_224', pretrained=True, retain_head=False)
+if args.vision_pretrained in VISION_PRETRAINED_AVAILABLE.keys():
+    assert VISION_PRETRAINED_AVAILABLE[args.vision_pretrained] == args.vision_model_type, \
+        'Vision model type does not match pretrained model'
+vision_model = load_vision_model(args.vision_model_type, args.vision_pretrained)
 
 ### Load text model
-# text_pretrained = "microsoft/BiomedVLP-CXR-BERT-general"
-text_pretrained = "./weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint"
-text_model = BertModel.from_pretrained(text_pretrained)
-
-tokenizer = AutoTokenizer.from_pretrained(text_pretrained)
-image_processor = lambda x: ViTImageProcessor()(x, return_tensors="pt", return_dict=True)
-
-### Load sample input
-img_path = 'sample.jpeg'
-img = skimage.io.imread(img_path)
-imgs = np.stack([img, img])
-vision_inputs = image_processor(imgs)
+text_model = BertModel.from_pretrained(args.text_pretrained)
+tokenizer = AutoTokenizer.from_pretrained(args.text_pretrained)
 
 ### Define model
+add_cls_token = args.vision_model_type == 'ae'
+vision_output_dim = VISION_MODEL_TYPE_2_VISION_OUTPUT_DIM[args.vision_model_type]
 model = Adaptor(
     text_model=text_model,
     vision_model=vision_model,
-    vision_model_type='timm', 
-    vision_output_dim=1024,
-    projection_dim=768,
+    vision_model_type=args.vision_model_type, 
+    vision_output_dim=vision_output_dim,
+    projection_dim=args.projection_dim,
+    num_hidden_layers=args.num_hidden_layers, 
+    add_cls_token=add_cls_token,
+)
+freeze_encoder(model)  # freeze encoder
+
+
+### Load dataset
+data_transforms = VISION_MODEL_TYPE_2_DATA_TRANSFORM[args.vision_model_type]
+
+train_dataset_pkl = f'saved_datasets/train_dataset_{args.vision_model_type}.pkl'
+val_dataset_pkl = f'saved_datasets/val_dataset_{args.vision_model_type}.pkl'
+
+train_dataset = pickle_dataset(
+    train_dataset_pkl, 
+    split='train', 
+    transform=data_transforms(True, args.crop_size), 
+    data_pct=args.data_pct, 
+    force_rebuild=args.force_rebuild_dataset, 
+)
+val_dataset = pickle_dataset(
+    val_dataset_pkl,
+    split='valid',
+    transform=data_transforms(False, args.crop_size),
+    data_pct=args.data_pct, 
+    force_rebuild=args.force_rebuild_dataset, 
 )
 
-### Obtain inputs
-vision_inputs = image_processor(imgs)
-text_inputs = tokenizer(
-    text=["Nodule", "Lung Lesion"], 
-    return_tensors="pt", padding=True, 
-)
-inputs = {**vision_inputs, **text_inputs}
 
-### Forward to get output
-outputs = model(**inputs, return_dict=True, return_loss=True)
-
+### Training
 arguments = TrainingArguments(
     output_dir="./results",
-    per_device_train_batch_size=batch_size, 
-    per_device_eval_batch_size=batch_size,  
-    num_train_epochs=1, 
+    per_device_train_batch_size=args.batch_size, 
+    per_device_eval_batch_size=args.batch_size,  
+    num_train_epochs=args.num_train_epochs,
     save_strategy="epoch",
-    learning_rate=5e-5, 
-    seed=1117, 
+    learning_rate=args.lr, 
+    seed=args.seed, 
     push_to_hub=False, 
 )
 
