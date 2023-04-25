@@ -12,7 +12,6 @@ from datasets.dataset import MultimodalPretrainingDatasetForAdaptor
 from mgca.datasets.transforms import DataTransforms
 
 import pickle
-import logging
 
 
 class AutoEncoderDataTransforms(object):
@@ -48,12 +47,6 @@ class BatchedXRayCenterCrop(object):
     def __call__(self, img):
         return self.crop_center(img)
   
-    
-VISION_MODEL_TYPE_2_DATA_TRANSFORM = {
-    'ae': AutoEncoderDataTransforms,
-    'timm': DataTransforms,
-    'transformers': DataTransforms,
-}
     
 def ae_image_processor(imgs:np.ndarray, return_dict=True) \
         -> Union[torch.Tensor, dict[str, torch.Tensor]]:
@@ -96,5 +89,4 @@ def pickle_dataset(dataset_pkl, split, transform, data_pct, force_rebuild=False)
             dataset = pickle.load(f)
     
     return dataset
-
-        
+     

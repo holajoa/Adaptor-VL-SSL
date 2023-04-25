@@ -47,13 +47,13 @@ class MultimodalPretrainingDatasetForAdaptor(MultimodalPretrainingDataset):
             cur_split = getattr(row, MIMIC_CXR_SPLIT_COL)
             path = getattr(row, MIMIC_CXR_PATH_COL)
             
-            ### Addition: make sure path points to an existing file 
+            ### Addition: make sure path points to an existing file ==========
             if not Path(path).is_file():
                 continue
+            ### End addition =================================================
             
             if cur_split == split and path in path2sent:
                 filenames.append(path)
-                
         return filenames, path2sent
 
 def multimodal_collator(*args, **kwargs):
