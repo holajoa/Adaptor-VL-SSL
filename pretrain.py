@@ -30,7 +30,8 @@ parser.add_argument('--vision_model_type', type=str, help='Choose from [timm, ae
 parser.add_argument('--text_pretrained', type=str, 
                     help='Choose from [bert-base-uncased, dmis-lab/biobert-v1.1, '
                     'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext, '
-                    'microsoft/BiomedVLP-CXR-BERT-general]')
+                    'microsoft/BiomedVLP-CXR-BERT-general, '
+                    './weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint]')
 parser.add_argument('--batch_size', type=int, default=32)
 
 parser.add_argument('--force_rebuild_dataset', action='store_true', help='Whether to force rebuild dataset, if not can load pickled file if available')

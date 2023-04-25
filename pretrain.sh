@@ -1,1 +1,1 @@
-python3 ./pretrain.py --vision_model_type ae --vision_pretrained 101-elastic --text_pretrained "dmis-lab/biobert-v1.1" --batch_size 32 --data_pct 0.01 --num_hidden_layers 1 --seed 42 
+python3 ./pretrain.py --vision_model_type timm --vision_pretrained swin_base_patch4_window7_224 --text_pretrained "./weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint" --batch_size 32 --data_pct 0.01 --num_hidden_layers 1 --seed 42 
