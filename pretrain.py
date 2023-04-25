@@ -51,6 +51,12 @@ args = parser.parse_args()
 
 torch.manual_seed(args.seed)
 
+num_of_gpus = torch.cuda.device_count()
+print(f"Number of available GPUs = {num_of_gpus}: "
+      f"{', '.join([torch.cuda.get_device_properties(i).name for i in range(num_of_gpus)])}.")
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 ### Load vision model
 if args.vision_pretrained in VISION_PRETRAINED_AVAILABLE.keys():
     assert VISION_PRETRAINED_AVAILABLE[args.vision_pretrained] == args.vision_model_type, \
@@ -74,6 +80,8 @@ model = Adaptor(
     add_cls_token=add_cls_token,
 )
 freeze_encoder(model)  # freeze encoder
+model = nn.DataParallel(model)
+model.to(device)
 
 
 ### Load dataset
@@ -96,7 +104,6 @@ val_dataset = pickle_dataset(
     data_pct=args.data_pct, 
     force_rebuild=args.force_rebuild_dataset, 
 )
-
 
 ### Training
 arguments = TrainingArguments(

@@ -19,6 +19,7 @@ from utils.utils import (
 # from utils.dataset_utils import ae_image_processor, timm_image_processor
 
 from utils.dataset_utils import pickle_dataset
+from utils.model_utils import load_vision_model
 
 import logging
 
@@ -42,12 +43,17 @@ print(f'Using device: {device}')
 
 
 # Load pretrained models
-vision_model = load_timm_model('swin_base_patch4_window7_224', pretrained=True, retain_head=False)
+# vision_model = load_timm_model('swin_base_patch4_window7_224', pretrained=True, retain_head=False)
+vision_model_type = 'ae'
+vision_pretrained = '101-elastic'
+vision_model = load_vision_model(vision_model_type, vision_pretrained, retain_head=False)
+vision_model = nn.DataParallel(vision_model, device_ids=[0, 1])
 vision_model.to(device)
-vision_model_type = 'timm'
 
-text_pretrained = "./weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint"
+
+text_pretrained = "dmis-lab/biobert-v1.1"
 text_model = BertModel.from_pretrained(text_pretrained)
+text_model = nn.DataParallel(text_model, device_ids=[0, 1])
 text_model.to(device)
 
 ### Load dataset
@@ -102,19 +108,19 @@ test_dataloader = get_dataloader(
 
 for split, dataloader in zip(['train', 'valid', 'test'], 
                              [train_dataloader, val_dataloader, test_dataloader]):
-    # get_text_embeds_raw(
-    #     dataloader,
-    #     text_model=text_model,
-    #     save_path='./saved_embeddings/text_embeds',
-    #     model_name='ClinicalBERT',
-    #     split=split,
-    # )
+
+    get_text_embeds_raw(
+        dataloader,
+        text_model=text_model,
+        save_path='./saved_embeddings/text_embeds',
+        model_name='BioBERT',
+        split=split,
+    )
     get_image_embeds_raw(
         dataloader,
         vision_model=vision_model,
         vision_model_type='timm', 
         save_path='./saved_embeddings/image_embeds',
-        model_name='Swin-Base',
+        model_name='ResNetAE',
         split=split,
     )
-
