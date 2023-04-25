@@ -9,7 +9,8 @@ import numpy as np
 from transformers import AutoTokenizer
 from transformers import BertModel, AutoModel, ViTImageProcessor
 
-from models.adaptor import Adaptor
+# from models.adaptor import Adaptor
+from models.configurations import VISION_MODEL_TYPE_2_DATA_TRANSFORM
 from utils.utils import (
     load_timm_model, freeze_encoder, 
     get_text_embeds_raw, get_image_embeds_raw,
@@ -17,10 +18,7 @@ from utils.utils import (
 )
 # from utils.dataset_utils import ae_image_processor, timm_image_processor
 
-from utils.dataset_utils import (
-    pickle_dataset, 
-    VISION_MODEL_TYPE_2_DATA_TRANSFORM, 
-)
+from utils.dataset_utils import pickle_dataset
 
 import logging
 
@@ -104,13 +102,13 @@ test_dataloader = get_dataloader(
 
 for split, dataloader in zip(['train', 'valid', 'test'], 
                              [train_dataloader, val_dataloader, test_dataloader]):
-    get_text_embeds_raw(
-        dataloader,
-        text_model=text_model,
-        save_path='./saved_embeddings/text_embeds',
-        model_name='ClinicalBERT',
-        split=split,
-    )
+    # get_text_embeds_raw(
+    #     dataloader,
+    #     text_model=text_model,
+    #     save_path='./saved_embeddings/text_embeds',
+    #     model_name='ClinicalBERT',
+    #     split=split,
+    # )
     get_image_embeds_raw(
         dataloader,
         vision_model=vision_model,

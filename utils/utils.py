@@ -52,12 +52,16 @@ def get_image_embeds_raw(
     if not os.path.exists(save_path):
         os.makedirs(save_path)
     
-    device = vision_model.device
+    if vision_model_type == 'timm':
+        device = next(vision_model.parameters()).device  # timm-loaded model is a nn.Sequential
+    else:
+        device = vision_model.device
     vision_model.eval()
     with torch.no_grad():
         for batch_idx, inputs in enumerate(tqdm(dataloader)):
             for k, v in inputs.items():
-                inputs[k] = v.to(device=device)
+                if isinstance(v, torch.Tensor):
+                    inputs[k] = v.to(device=device)
             if vision_model_type == 'huggingface':
                 vision_outputs = vision_model(
                     inputs.pixel_values,
