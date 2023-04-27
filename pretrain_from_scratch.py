@@ -1,14 +1,18 @@
 import torch 
 import torch.nn as nn
+
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+
 from typing import List, Union, Tuple, Dict, Optional
 
 import numpy as np
 
 from transformers import AutoTokenizer
-from transformers import BertModel, AutoModel, ViTImageProcessor
+from transformers import BertModel
 
 import torchxrayvision as xrv
-from models.adaptor import Adaptor
+from models.adaptor import Adaptor, AdaptorTrainer, ExternalLoggingCallback
 from models.configurations import (
     TEXT_PRETRAINED_AVAILABLE,
     VISION_PRETRAINED_AVAILABLE,
@@ -33,10 +37,10 @@ parser.add_argument('--text_pretrained', type=str,
                     'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext, '
                     'microsoft/BiomedVLP-CXR-BERT-general, '
                     './weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint]')
-parser.add_argument('--batch_size', type=int, default=32)
+parser.add_argument('--batch_size', type=int, default=128)
 
 parser.add_argument('--force_rebuild_dataset', action='store_true', help='Whether to force rebuild dataset, if not can load pickled file if available')
-parser.add_argument('--num_workers', type=int, default=16)
+parser.add_argument('--num_workers', type=int, default=8)
 parser.add_argument('--data_pct', type=float, default=0.01, help='percentage of data to use')
 parser.add_argument('--crop_size', type=int, default=224)
 
@@ -47,14 +51,16 @@ parser.add_argument('--lr', type=float, default=1e-4)
 parser.add_argument('--num_train_epochs', type=int, default=1)
 
 parser.add_argument('--seed', type=int, default=1117)
+parser.add_argument('--output_dir', type=str, default='./results', help='path to save model')
+
 
 args = parser.parse_args()
 
 torch.manual_seed(args.seed)
 
-num_of_gpus = torch.cuda.device_count()
-logging.INFO(f"Number of available GPUs = {num_of_gpus}: "
-             f"{', '.join([torch.cuda.get_device_properties(i).name for i in range(num_of_gpus)])}.")
+# num_of_gpus = torch.cuda.device_count()
+# logging.INFO(f"Number of available GPUs = {num_of_gpus}: "
+#              f"{', '.join([torch.cuda.get_device_properties(i).name for i in range(num_of_gpus)])}.")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -107,23 +113,31 @@ val_dataset = pickle_dataset(
 )
 
 ### Training
+optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=0.05)
+lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=2, eta_min=1e-5)
+
 arguments = TrainingArguments(
-    output_dir="./results",
+    output_dir=args.output_dir,
     per_device_train_batch_size=args.batch_size, 
     per_device_eval_batch_size=args.batch_size,  
     num_train_epochs=args.num_train_epochs,
+    dataloader_num_workers=args.num_workers,
+    logging_steps=20, 
     save_strategy="epoch",
-    learning_rate=args.lr, 
+    # learning_rate=args.lr, 
     seed=args.seed, 
     push_to_hub=False, 
+    dataloader_pin_memory=True, 
 )
 
-trainer = Trainer(
+trainer = AdaptorTrainer(
     model=model, 
     args=arguments,
     train_dataset=train_dataset, 
     eval_dataset=val_dataset, 
     tokenizer=tokenizer, 
     data_collator=multimodal_collator, 
+    optimizers=(optimizer, lr_schedule),
+    callbacks=[ExternalLoggingCallback()],
 )
 trainer.train()

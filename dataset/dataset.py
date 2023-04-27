@@ -164,6 +164,7 @@ class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
             image_tensor = image_tensor['z']
         image_tensor = image_tensor[batch_item_idx]
         
+        print('Single sample loaded. ')
         return {'text_embeds_raw':text_tensor, 'image_embeds_raw':image_tensor}
 
     def __len__(self):
