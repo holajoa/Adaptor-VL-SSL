@@ -97,4 +97,3 @@ def get_text_embeds_raw(
             text_embeds_raw = text_outputs.last_hidden_state
             pt_filename = f'{split}_{batch_idx}.pt'
             torch.save(text_embeds_raw, os.path.join(save_path, pt_filename))
-    

@@ -1,7 +1,7 @@
 import torchvision.transforms as transforms
 import torchxrayvision as xrv
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 import numpy as np
 from transformers import ViTImageProcessor
 
@@ -90,9 +90,11 @@ def ae_image_processor(imgs:np.ndarray, return_dict=True) \
 def timm_image_processor(imgs:np.ndarray) -> torch.Tensor:
     return ViTImageProcessor()(imgs, return_tensors="pt", return_dict=True)
 
-def pickle_dataset(dataset_pkl, split, transform, data_pct, force_rebuild=False):
+def pickle_dataset(dataset_pkl, split, transform=None, data_pct=1.0, 
+                   dataset_class:Dataset=MultimodalPretrainingDatasetForAdaptor, 
+                   force_rebuild=False):
     if not Path(dataset_pkl).is_file() or force_rebuild:
-        ds = MultimodalPretrainingDatasetForAdaptor(
+        ds = dataset_class(
             split=split, 
             transform=transform, 
             data_pct=data_pct, 

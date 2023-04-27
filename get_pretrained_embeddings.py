@@ -13,9 +13,12 @@ from utils.model_utils import load_vision_model
 import logging
 
 from dataset.dataset import multimodal_collator
+import logging
 
 import multiprocessing as mp
-print(f'Number of CPUs: {mp.cpu_count()}')
+
+
+logging.INFO(f'Number of CPUs: {mp.cpu_count()}')
 
 seed = 1117
 batch_size = 128

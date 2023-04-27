@@ -11,10 +11,11 @@ from transformers.modeling_outputs import (
 from transformers.modeling_utils import ModuleUtilsMixin
 from transformers.models.clip.modeling_clip import CLIPOutput
 from transformers.models.clip.modeling_clip import clip_loss
-from transformers import Trainer
+from transformers import Trainer, TrainerCallback, TrainingArguments
 
 from torch.utils.data import DataLoader
-
+from torch.utils.data.dataloader import BatchSampler
+from dataset.dataset import PredefinedBatchSampler
 import logging
 
 
@@ -33,7 +34,7 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         
         if add_vision_cls_token:
             self.cls_token = nn.Parameter(torch.zeros((1, self.config.hidden_size)))
-            self.embeddings = lambda t, i: torch.cat([t, self.cls_token.repeat(t.size(0), 1, 1), i], dim=1)
+            self.embeddings = lambda t, i: torch.cat([t, self.cls_token.repeat(t.size(0), 1, 1).to(t.device), i], dim=1)
         else:
             self.embeddings = lambda t, i: torch.cat([t, i], dim=1)
         self.encoder = BertEncoder(self.config)
@@ -55,7 +56,7 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         **kwargs, 
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         
-
+        assert text_embeds.device == image_embeds.device, "text and image embeddings must be on the same device"
         inputs_embeds = self.embeddings(text_embeds, image_embeds)
         
         # Copied from transformers/models/bert/modeling_bert.py, BertModel.forward()
@@ -77,7 +78,7 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
         
-        token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+        # token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
         
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -223,9 +224,11 @@ class Adaptor(nn.Module):
                 vision_outputs = self.vision_model(pixel_values)
                 image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
             else: 
-                logging.error(f'{self.vision_model_type} is not supported.')
+                logging.ERROR(f'{self.vision_model_type} is not supported.')
         else:
-            logging.info('Using precomputed image_embeds_raw.')
+            # logging.info('Using precomputed image_embeds_raw.')
+            if self.vision_model_type == 'ae' and len(image_embeds_raw.shape) == 4:
+                image_embeds_raw = torch.flatten(image_embeds_raw, start_dim=2).permute((0, 2, 1))
         
         if text_embeds_raw is None:
             assert input_ids is not None, \
@@ -240,8 +243,8 @@ class Adaptor(nn.Module):
                 return_dict=return_dict,
             )
             text_embeds_raw = text_outputs.last_hidden_state
-        else:
-            logging.info('Using precomputed text_embeds_raw.')
+        # else:
+        #     logging.info('Using precomputed text_embeds_raw.')
         
         image_embeds, text_embeds = self.projection(text_embeds_raw, image_embeds_raw)
         outputs = self.adaptor_module(text_embeds, image_embeds)
@@ -277,6 +280,11 @@ class Adaptor(nn.Module):
             # vision_model_output=vision_outputs,
         )
         
+
+class AdaptorTrainingArguments(TrainingArguments):
+    def __init__(self, num_of_batches=-1, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._num_of_batches = num_of_batches
         
 class AdaptorTrainer(Trainer):
     def get_train_dataloader(self) -> DataLoader:
@@ -297,7 +305,16 @@ class AdaptorTrainer(Trainer):
         data_collator = self.data_collator
 
         train_sampler = self._get_train_sampler()
-
+        # train_sampler = BatchSampler(
+        #     sampler=PredefinedBatchSampler(
+        #         data_source=self.train_dataset, 
+        #         num_of_batches=self.args._num_of_batches, 
+        #         batch_size=self.args.per_device_train_batch_size, 
+        #     ), 
+        #     batch_size=self.args.per_device_train_batch_size,
+        #     drop_last=False, 
+        # )
+        
         return DataLoader(
             train_dataset,
             batch_size=self._train_batch_size,
@@ -308,4 +325,10 @@ class AdaptorTrainer(Trainer):
             pin_memory=self.args.dataloader_pin_memory,
             worker_init_fn=seed_worker,
         )
+        
+class ExternalLoggingCallback(TrainerCallback):
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        _ = logs.pop("total_flos", None)
+        if state.is_local_process_zero:
+            logging.INFO(logs)
         

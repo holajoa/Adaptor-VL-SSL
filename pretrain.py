@@ -6,11 +6,11 @@ import os
 from tqdm import tqdm
 
 from dataset.dataset import (
-    MultimodalPretrainedEmbeddingsDatasetLoader, 
+    # MultimodalPretrainedEmbeddingsDatasetLoader, 
     MultimodalPretrainedEmbeddingsDataset, 
 )
 
-from models.adaptor import Adaptor, AdaptorTrainer
+from models.adaptor import Adaptor, AdaptorTrainer, AdaptorTrainingArguments, ExternalLoggingCallback
 from models.configurations import (
     TEXT_PRETRAINED_AVAILABLE,
     VISION_PRETRAINED_AVAILABLE,
@@ -23,10 +23,14 @@ from transformers import AutoTokenizer
 from transformers import BertModel
 from transformers import TrainingArguments
 
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+
 from datasets import Dataset
 
 import argparse
 
+import logging
 
 # SAVED_EMBEDDINGS_DIR = '/vol/bitbucket/jq619/individual-project/saved_embeddings'
 
@@ -46,7 +50,7 @@ parser.add_argument('--num_of_batches', type=int, default=100, help='number of b
 parser.add_argument('--batch_size', type=int, default=32)
 
 parser.add_argument('--force_rebuild_dataset', action='store_true', help='Whether to force rebuild dataset, if not can load pickled file if available')
-parser.add_argument('--num_workers', type=int, default=16)
+parser.add_argument('--num_workers', type=int, default=8)
 parser.add_argument('--data_pct', type=float, default=0.01, help='percentage of data to use')
 parser.add_argument('--crop_size', type=int, default=224)
 
@@ -63,14 +67,24 @@ parser.add_argument('--output_dir', type=str, default='./results', help='path to
 args = parser.parse_args()
 
 
-### Load dataset
-train_dataset_loader = MultimodalPretrainedEmbeddingsDatasetLoader(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
-                                                                   split='train', num_of_batches=args.num_of_batches,)
-train_dataset = Dataset.from_dict(train_dataset_loader.load_dataset())
+from time import gmtime, strftime
+log_fn = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
+logging.basicConfig(filename=f'{log_fn}.log', encoding='utf-8', level=logging.INFO)
 
-val_dataset_loader = MultimodalPretrainedEmbeddingsDatasetLoader(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
-                                                                   split='valid', num_of_batches=args.num_of_batches,)
-val_dataset = Dataset.from_dict(val_dataset_loader.load_dataset())
+### Load dataset
+# train_dataset_loader = MultimodalPretrainedEmbeddingsDatasetLoader(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
+#                                                                    split='train', num_of_batches=args.num_of_batches,)
+# train_dataset = train_dataset_loader.load_data()
+
+# val_dataset_loader = MultimodalPretrainedEmbeddingsDatasetLoader(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
+#                                                                  split='valid', num_of_batches=args.num_of_batches,)
+# val_dataset = val_dataset_loader.load_data()
+
+train_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
+                                                      split='train', num_of_batches=args.num_of_batches,)
+val_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
+                                                    split='valid', num_of_batches=args.num_of_batches,)
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -101,24 +115,31 @@ model.to(device)
 
 
 ### Training
-arguments = TrainingArguments(
+optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=0.05)
+lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=2, eta_min=1e-5)
+
+arguments = AdaptorTrainingArguments(
     output_dir=args.output_dir,
     per_device_train_batch_size=args.batch_size, 
     per_device_eval_batch_size=args.batch_size,  
     num_train_epochs=args.num_train_epochs,
+    dataloader_num_workers=args.num_workers,
     logging_steps=20, 
     save_strategy="epoch",
     learning_rate=args.lr, 
     seed=args.seed, 
     push_to_hub=False, 
+    dataloader_pin_memory=True, 
+    num_of_batches=args.num_of_batches,
 )
 
-trainer = CustomTrainer(
+trainer = AdaptorTrainer(
     model=model, 
     args=arguments,
     train_dataset=train_dataset, 
-    # eval_dataset=val_dataset, 
-    # tokenizer=tokenizer, 
+    eval_dataset=val_dataset,  
     data_collator=None, 
+    optimizers=(optimizer, lr_schedule),
+    callbacks=[ExternalLoggingCallback()],
 )
 trainer.train()

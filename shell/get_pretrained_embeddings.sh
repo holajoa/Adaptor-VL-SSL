@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH  --gpus-per-node=2
-#SBATCH --mail-type=ALL
+#SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jq619
 export PATH=/vol/bitbucket/jq619/idv/bin/:$PATH
 source activate

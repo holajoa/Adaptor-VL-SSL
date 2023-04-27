@@ -4,6 +4,7 @@ events.out.*
 saved_embeddings*
 saved_datasets/*
 *.out
+results/*
 
 # Byte-compiled / optimized / DLL files
 data/*

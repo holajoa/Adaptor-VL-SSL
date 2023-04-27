@@ -22,6 +22,7 @@ from utils.model_utils import load_vision_model
 from transformers import TrainingArguments, Trainer
 from dataset.dataset import multimodal_collator
 import argparse 
+import logging
 
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -52,8 +53,8 @@ args = parser.parse_args()
 torch.manual_seed(args.seed)
 
 num_of_gpus = torch.cuda.device_count()
-print(f"Number of available GPUs = {num_of_gpus}: "
-      f"{', '.join([torch.cuda.get_device_properties(i).name for i in range(num_of_gpus)])}.")
+logging.INFO(f"Number of available GPUs = {num_of_gpus}: "
+             f"{', '.join([torch.cuda.get_device_properties(i).name for i in range(num_of_gpus)])}.")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
