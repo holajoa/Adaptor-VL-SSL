@@ -71,14 +71,7 @@ from time import gmtime, strftime
 log_fn = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
 logging.basicConfig(filename=f'{log_fn}.log', encoding='utf-8', level=logging.INFO)
 
-### Load dataset
-# train_dataset_loader = MultimodalPretrainedEmbeddingsDatasetLoader(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
-#                                                                    split='train', num_of_batches=args.num_of_batches,)
-# train_dataset = train_dataset_loader.load_data()
 
-# val_dataset_loader = MultimodalPretrainedEmbeddingsDatasetLoader(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
-#                                                                  split='valid', num_of_batches=args.num_of_batches,)
-# val_dataset = val_dataset_loader.load_data()
 
 train_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
                                                       split='train', num_of_batches=args.num_of_batches,)
@@ -140,6 +133,6 @@ trainer = AdaptorTrainer(
     eval_dataset=val_dataset,  
     data_collator=None, 
     optimizers=(optimizer, lr_schedule),
-    callbacks=[ExternalLoggingCallback()],
+    # callbacks=[ExternalLoggingCallback()],
 )
 trainer.train()

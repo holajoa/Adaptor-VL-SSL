@@ -58,11 +58,17 @@ args = parser.parse_args()
 
 torch.manual_seed(args.seed)
 
-# num_of_gpus = torch.cuda.device_count()
-# logging.INFO(f"Number of available GPUs = {num_of_gpus}: "
-#              f"{', '.join([torch.cuda.get_device_properties(i).name for i in range(num_of_gpus)])}.")
+
+from time import gmtime, strftime
+log_fn = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
+logging.basicConfig(filename=f'{log_fn}.log', encoding='utf-8', level=logging.INFO)
+
+num_of_gpus = torch.cuda.device_count()
+logging.info(f"Number of available GPUs = {num_of_gpus}: "
+             f"{', '.join([torch.cuda.get_device_properties(i).name for i in range(num_of_gpus)])}.")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 ### Load vision model
 if args.vision_pretrained in VISION_PRETRAINED_AVAILABLE.keys():
