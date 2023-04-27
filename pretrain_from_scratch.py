@@ -1,16 +1,14 @@
-import torch
+import torch 
 import torch.nn as nn
-from torch.utils.data import Dataset, TensorDataset, DataLoader
+from typing import List, Union, Tuple, Dict, Optional
 
-import os
-from tqdm import tqdm
+import numpy as np
 
-from dataset.dataset import (
-    MultimodalPretrainedEmbeddingsDatasetLoader, 
-    MultimodalPretrainedEmbeddingsDataset, 
-)
+from transformers import AutoTokenizer
+from transformers import BertModel, AutoModel, ViTImageProcessor
 
-from models.adaptor import Adaptor, AdaptorTrainer
+import torchxrayvision as xrv
+from models.adaptor import Adaptor
 from models.configurations import (
     TEXT_PRETRAINED_AVAILABLE,
     VISION_PRETRAINED_AVAILABLE,
@@ -18,17 +16,13 @@ from models.configurations import (
     VISION_MODEL_TYPE_2_VISION_OUTPUT_DIM, 
 )
 from utils.utils import load_timm_model, freeze_encoder
+from utils.dataset_utils import ae_image_processor, pickle_dataset
 from utils.model_utils import load_vision_model
-from transformers import AutoTokenizer
-from transformers import BertModel
-from transformers import TrainingArguments
 
-from datasets import Dataset
+from transformers import TrainingArguments, Trainer
+from dataset.dataset import multimodal_collator
+import argparse 
 
-import argparse
-
-
-# SAVED_EMBEDDINGS_DIR = '/vol/bitbucket/jq619/individual-project/saved_embeddings'
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--vision_pretrained', type=str, help='Choose from [101-elastic, swin_base_patch4_window7_224]')
@@ -38,11 +32,6 @@ parser.add_argument('--text_pretrained', type=str,
                     'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext, '
                     'microsoft/BiomedVLP-CXR-BERT-general, '
                     './weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint]')
-
-parser.add_argument('--text_embeds_raw_dir', type=str, help='path to raw text embeddings')
-parser.add_argument('--image_embeds_raw_dir', type=str, help='path to raw image embeddings')
-parser.add_argument('--num_of_batches', type=int, default=100, help='number of batches to use for training')
-
 parser.add_argument('--batch_size', type=int, default=32)
 
 parser.add_argument('--force_rebuild_dataset', action='store_true', help='Whether to force rebuild dataset, if not can load pickled file if available')
@@ -58,30 +47,25 @@ parser.add_argument('--num_train_epochs', type=int, default=1)
 
 parser.add_argument('--seed', type=int, default=1117)
 
-parser.add_argument('--output_dir', type=str, default='./results', help='path to save model')
-
 args = parser.parse_args()
 
+torch.manual_seed(args.seed)
 
-### Load dataset
-train_dataset_loader = MultimodalPretrainedEmbeddingsDatasetLoader(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
-                                                                   split='train', num_of_batches=args.num_of_batches,)
-train_dataset = Dataset.from_dict(train_dataset_loader.load_dataset())
-
-val_dataset_loader = MultimodalPretrainedEmbeddingsDatasetLoader(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
-                                                                   split='valid', num_of_batches=args.num_of_batches,)
-val_dataset = Dataset.from_dict(val_dataset_loader.load_dataset())
+num_of_gpus = torch.cuda.device_count()
+print(f"Number of available GPUs = {num_of_gpus}: "
+      f"{', '.join([torch.cuda.get_device_properties(i).name for i in range(num_of_gpus)])}.")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-### Load vision model (not used in training actually, just for model definition)
+### Load vision model
 if args.vision_pretrained in VISION_PRETRAINED_AVAILABLE.keys():
     assert VISION_PRETRAINED_AVAILABLE[args.vision_pretrained] == args.vision_model_type, \
         'Vision model type does not match pretrained model'
 vision_model = load_vision_model(args.vision_model_type, args.vision_pretrained)
 
-### Load text model (not used in training actually, just for model definition)
+### Load text model
 text_model = BertModel.from_pretrained(args.text_pretrained)
+tokenizer = AutoTokenizer.from_pretrained(args.text_pretrained)
 
 ### Define model
 add_cls_token = args.vision_model_type == 'ae'
@@ -100,25 +84,45 @@ model = nn.DataParallel(model)
 model.to(device)
 
 
+### Load dataset
+data_transforms = VISION_MODEL_TYPE_2_DATA_TRANSFORM[args.vision_model_type]
+
+train_dataset_pkl = f'saved_datasets/train_dataset_{args.vision_model_type}.pkl'
+val_dataset_pkl = f'saved_datasets/val_dataset_{args.vision_model_type}.pkl'
+
+train_dataset = pickle_dataset(
+    train_dataset_pkl, 
+    split='train', 
+    transform=data_transforms(True, args.crop_size), 
+    data_pct=args.data_pct, 
+    force_rebuild=args.force_rebuild_dataset, 
+)
+val_dataset = pickle_dataset(
+    val_dataset_pkl,
+    split='valid',
+    transform=data_transforms(False, args.crop_size),
+    data_pct=args.data_pct, 
+    force_rebuild=args.force_rebuild_dataset, 
+)
+
 ### Training
 arguments = TrainingArguments(
-    output_dir=args.output_dir,
+    output_dir="./results",
     per_device_train_batch_size=args.batch_size, 
     per_device_eval_batch_size=args.batch_size,  
     num_train_epochs=args.num_train_epochs,
-    logging_steps=20, 
     save_strategy="epoch",
     learning_rate=args.lr, 
     seed=args.seed, 
     push_to_hub=False, 
 )
 
-trainer = CustomTrainer(
+trainer = Trainer(
     model=model, 
     args=arguments,
     train_dataset=train_dataset, 
-    # eval_dataset=val_dataset, 
-    # tokenizer=tokenizer, 
-    data_collator=None, 
+    eval_dataset=val_dataset, 
+    tokenizer=tokenizer, 
+    data_collator=multimodal_collator, 
 )
 trainer.train()

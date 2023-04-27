@@ -23,20 +23,6 @@ def freeze_encoder(model:Adaptor):
         for param in encoder.parameters():
             param.requires_grad = False
 
-def get_dataloader(
-    dataset, 
-    batch_size,
-    num_workers,
-    collate_fn,
-):
-    return DataLoader(
-        dataset, 
-        pin_memory=True, 
-        drop_last=True,
-        shuffle=False,
-        batch_size=batch_size,
-        collate_fn=collate_fn,
-    )
 
 def get_image_embeds_raw(
     dataloader,
@@ -52,16 +38,16 @@ def get_image_embeds_raw(
     if not os.path.exists(save_path):
         os.makedirs(save_path)
     
-    if vision_model_type == 'timm':
-        device = next(vision_model.parameters()).device  # timm-loaded model is a nn.Sequential
-    else:
-        device = vision_model.device
+    # if vision_model_type == 'timm':
+    #     device = next(vision_model.parameters()).device  # timm-loaded model is a nn.Sequential
+    # else:
+    #     device = vision_model.device
     vision_model.eval()
     with torch.no_grad():
         for batch_idx, inputs in enumerate(tqdm(dataloader)):
-            for k, v in inputs.items():
-                if isinstance(v, torch.Tensor):
-                    inputs[k] = v.to(device=device)
+            # for k, v in inputs.items():
+            #     if isinstance(v, torch.Tensor):
+            #         inputs[k] = v.to(device=device)
             if vision_model_type == 'huggingface':
                 vision_outputs = vision_model(
                     inputs.pixel_values,
@@ -95,13 +81,13 @@ def get_text_embeds_raw(
     if not os.path.exists(save_path):
         os.makedirs(save_path)
         
-    device = text_model.device
+    # device = text_model.device
     text_model.eval()
     with torch.no_grad():
         for batch_idx, inputs in enumerate(tqdm(dataloader)):
             [inputs.pop(key, None) for key in removed_arguments]
-            for k, v in inputs.items():
-                inputs[k] = v.to(device=device)
+            # for k, v in inputs.items():
+            #     inputs[k] = v.to(device=device)
             text_outputs = text_model(
                 **inputs, 
                 output_attentions=False,
