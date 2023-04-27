@@ -23,20 +23,6 @@ def freeze_encoder(model:Adaptor):
         for param in encoder.parameters():
             param.requires_grad = False
 
-def get_dataloader(
-    dataset, 
-    batch_size,
-    num_workers,
-    collate_fn,
-):
-    return DataLoader(
-        dataset, 
-        pin_memory=True, 
-        drop_last=True,
-        shuffle=False,
-        batch_size=batch_size,
-        collate_fn=collate_fn,
-    )
 
 def get_image_embeds_raw(
     dataloader,

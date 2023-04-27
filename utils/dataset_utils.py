@@ -1,6 +1,7 @@
 import torchvision.transforms as transforms
 import torchxrayvision as xrv
 import torch
+from torch.utils.data import DataLoader
 import numpy as np
 from transformers import ViTImageProcessor
 
@@ -8,11 +9,27 @@ from typing import Union
 
 from pathlib import Path
 
-from datasets.dataset import MultimodalPretrainingDatasetForAdaptor
+from dataset.dataset import MultimodalPretrainingDatasetForAdaptor
 from mgca.datasets.transforms import DataTransforms
 
 import pickle
 
+def get_dataloader(
+    dataset, 
+    batch_size,
+    num_workers=16,
+    collate_fn=None,
+    shuffle=False,
+):
+    return DataLoader(
+        dataset, 
+        pin_memory=True, 
+        drop_last=True,
+        shuffle=shuffle,
+        batch_size=batch_size,
+        collate_fn=collate_fn,
+        num_workers=num_workers, 
+    )
 
 class AutoEncoderDataTransforms(object):
     def __init__(self, is_train:bool=True, crop_size:int=224):
@@ -75,18 +92,18 @@ def timm_image_processor(imgs:np.ndarray) -> torch.Tensor:
 
 def pickle_dataset(dataset_pkl, split, transform, data_pct, force_rebuild=False):
     if not Path(dataset_pkl).is_file() or force_rebuild:
-        dataset = MultimodalPretrainingDatasetForAdaptor(
+        ds = MultimodalPretrainingDatasetForAdaptor(
             split=split, 
             transform=transform, 
             data_pct=data_pct, 
         )
         with open(dataset_pkl, "wb") as f:
-            pickle.dump(dataset, f, protocol=2)
+            pickle.dump(ds, f, protocol=2)
             print(f"Saved dataset to: {dataset_pkl}")
     else:
         print(f'Loading dataset from: {dataset_pkl}')
         with open(dataset_pkl, "rb") as f:
-            dataset = pickle.load(f)
+            ds = pickle.load(f)
     
-    return dataset
+    return ds
      

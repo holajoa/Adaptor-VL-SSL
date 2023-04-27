@@ -1,40 +1,26 @@
 import torch 
 import torch.nn as nn
-from torch.utils.data import DataLoader
 
-from typing import List, Union, Tuple, Dict, Optional
+from transformers import BertModel
 
-import numpy as np
-
-from transformers import AutoTokenizer
-from transformers import BertModel, AutoModel, ViTImageProcessor
-
-# from models.adaptor import Adaptor
 from models.configurations import VISION_MODEL_TYPE_2_DATA_TRANSFORM
-from utils.utils import (
-    load_timm_model, freeze_encoder, 
-    get_text_embeds_raw, get_image_embeds_raw,
-    get_dataloader,
-)
-# from utils.dataset_utils import ae_image_processor, timm_image_processor
+from utils.utils import get_text_embeds_raw, get_image_embeds_raw
 
+from utils.dataset_utils import get_dataloader
 from utils.dataset_utils import pickle_dataset
 from utils.model_utils import load_vision_model
 
 import logging
 
-from mgca.datasets.transforms import DataTransforms
-from datasets.dataset import (
-    MultimodalPretrainingDatasetForAdaptor, 
-    multimodal_collator, 
-)
+from dataset.dataset import multimodal_collator
 
-import skimage
+import multiprocessing as mp
+print(f'Number of CPUs: {mp.cpu_count()}')
 
 seed = 1117
 batch_size = 128
-num_workers = 16
-data_pct = 0.01
+num_workers = 8
+data_pct = 1.0
 crop_size = 224
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -105,6 +91,7 @@ test_dataloader = get_dataloader(
     num_workers=num_workers,
     collate_fn=multimodal_collator,
 )
+
 
 for split, dataloader in zip(['train', 'valid', 'test'], 
                              [train_dataloader, val_dataloader, test_dataloader]):
