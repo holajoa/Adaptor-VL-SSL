@@ -120,7 +120,7 @@ val_dataset = pickle_dataset(
 
 ### Training
 optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=0.05)
-lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=2, eta_min=1e-5)
+lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=2, eta_min=args.lr/10)
 
 arguments = TrainingArguments(
     output_dir=args.output_dir,
