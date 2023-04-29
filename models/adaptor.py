@@ -15,6 +15,8 @@ from transformers import Trainer, TrainerCallback, TrainingArguments
 
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import BatchSampler
+from transformers.trainer_callback import TrainerControl, TrainerState
+from transformers.training_args import TrainingArguments
 from dataset.dataset import PredefinedBatchSampler
 import logging
 
@@ -331,4 +333,7 @@ class ExternalLoggingCallback(TrainerCallback):
         _ = logs.pop("total_flos", None)
         if state.is_local_process_zero:
             logging.info(logs)
+    
+    def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         
+        return super().on_evaluate(args, state, control, **kwargs)

@@ -44,23 +44,28 @@ class MultimodalPretrainingDatasetForAdaptor(MultimodalPretrainingDataset):
     
         # filter studies to use for current split
         filenames = []
-        for row in tqdm(self.df.itertuples()):
-            cur_split = getattr(row, MIMIC_CXR_SPLIT_COL)
-            path = getattr(row, MIMIC_CXR_PATH_COL)
-            
-            ### Addition: make sure path points to an existing file ==========
-            if not Path(path).is_file():
-                continue
-            ### End addition =================================================
-            
-            if cur_split == split and path in path2sent:
-                filenames.append(path)
+        total = len(self.df)
+        with tqdm(total=total) as pbar:
+            for row in self.df.itertuples():
+                cur_split = getattr(row, MIMIC_CXR_SPLIT_COL)
+                path = getattr(row, MIMIC_CXR_PATH_COL)
+                
+                ### Addition: make sure path points to an existing file ==========
+                if not Path(path).is_file():
+                    continue
+                ### End addition =================================================
+                
+                if cur_split == split and path in path2sent:
+                    filenames.append(path)
+                
+                pbar.update(1)
         return filenames, path2sent
 
 def multimodal_collator(*args, **kwargs):
     d = multimodal_collate_fn(*args, **kwargs)
     d['input_ids'] = d.pop('caption_ids')
     d['pixel_values'] = d.pop('imgs')
+    d['return_loss'] = True
     return d
 
 
