@@ -12,6 +12,8 @@ from pathlib import Path
 from dataset.dataset import MultimodalPretrainingDatasetForAdaptor
 from mgca.datasets.transforms import DataTransforms
 
+from datasets import Dataset
+
 import pickle
 
 def get_dataloader(
@@ -108,4 +110,19 @@ def pickle_dataset(dataset_pkl, split, transform=None, data_pct=1.0,
             ds = pickle.load(f)
     
     return ds
-     
+
+
+def torch2huggingface_dataset(torch_dataset, streaming=True):
+    if streaming:
+        def gen():
+            for ex in torch_dataset:
+                yield ex
+        return Dataset.from_generator(gen, streaming=True)
+        
+    else:
+        def gen():
+            for idx in len(torch_dataset):
+                yield torch_dataset[idx]
+        return Dataset.from_generator(gen, streaming=False)
+    
+    

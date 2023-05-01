@@ -6,7 +6,7 @@ import os
 from tqdm import tqdm
 
 from dataset.dataset import (
-    # MultimodalPretrainedEmbeddingsDatasetLoader, 
+    MultimodalPretrainedEmbeddingsIterableDataset, 
     MultimodalPretrainedEmbeddingsDataset, 
 )
 
@@ -19,12 +19,18 @@ from models.configurations import (
 )
 from utils.utils import load_timm_model, freeze_encoder
 from utils.model_utils import load_vision_model
+from utils.dataset_utils import torch2huggingface_dataset
 from transformers import AutoTokenizer
 from transformers import BertModel
 from transformers import TrainingArguments
 
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import init_process_group, destroy_process_group
 
 from datasets import Dataset
 
@@ -60,26 +66,39 @@ parser.add_argument('--projection_dim', type=int, default=768, help='dimension o
 parser.add_argument('--lr', type=float, default=1e-4)
 parser.add_argument('--num_train_epochs', type=int, default=1)
 
+parser.add_argument('--local_rank', default=-1, type=int, help='node rank for distributed training')
+
 parser.add_argument('--seed', type=int, default=1117)
 
 parser.add_argument('--output_dir', type=str, default='./results', help='path to save model')
 
 args = parser.parse_args()
 
+torch.manual_seed(args.seed)
 
 from time import gmtime, strftime
 log_fn = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
 logging.basicConfig(filename=f'{log_fn}.log', encoding='utf-8', level=logging.INFO)
 
-
-
-train_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
-                                                      split='train', num_of_batches=args.num_of_batches,)
-val_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
-                                                    split='valid', num_of_batches=args.num_of_batches,)
-
+num_of_gpus = torch.cuda.device_count()
+logging.info(f"Number of available GPUs = {num_of_gpus}: "
+             f"{', '.join([torch.cuda.get_device_properties(i).name for i in range(num_of_gpus)])}.")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# ### Enable distributed training
+# if device != torch.device("cpu"):
+#     def ddp_setup(rank:int, world_size:int):
+#         """_summary_
+
+#         Args:
+#             rank (int): unique identifier assigned to each process (0 ~ world_size-1)
+#             world_size (int): Total number of processes in a group
+#         """
+#         os.environ['MASTER_ADDR'] = 'localhost'
+#         os.environ['MASTER_PORT'] = '12355'
+#         init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    
 
 ### Load vision model (not used in training actually, just for model definition)
 if args.vision_pretrained in VISION_PRETRAINED_AVAILABLE.keys():
@@ -103,13 +122,30 @@ model = Adaptor(
     add_cls_token=add_cls_token,
 )
 freeze_encoder(model)  # freeze encoder
-model = nn.DataParallel(model)
+# model = nn.DataParallel(model)
+# model = DDP(model, device_ids=[0, 1])
 model.to(device)
 
 
+### Load dataset
+dataset_device = 'cpu' if args.num_workers > 0 else device
+train_dataset = MultimodalPretrainedEmbeddingsIterableDataset(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
+                                                              split='train', num_of_batches=args.num_of_batches, 
+                                                              device=dataset_device)
+args.max_steps = len(train_dataset) // args.batch_size * args.num_train_epochs
+
+train_dataset = torch2huggingface_dataset(train_dataset, streaming=True)
+train_dataset.with_format('torch')
+
+val_dataset = MultimodalPretrainedEmbeddingsIterableDataset(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
+                                                            split='valid', num_of_batches=args.num_of_batches, 
+                                                            device=dataset_device)
+val_dataset = torch2huggingface_dataset(val_dataset, streaming=True)
+val_dataset.with_format('torch')
+
 ### Training
 optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=0.05)
-lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=2, eta_min=1e-5)
+lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=2, eta_min=args.lr/10)
 
 arguments = AdaptorTrainingArguments(
     output_dir=args.output_dir,
@@ -117,13 +153,17 @@ arguments = AdaptorTrainingArguments(
     per_device_eval_batch_size=args.batch_size,  
     num_train_epochs=args.num_train_epochs,
     dataloader_num_workers=args.num_workers,
+    dataloader_drop_last=True,
     logging_steps=20, 
+    evaluation_strategy='steps', 
+    eval_steps=100, 
     save_strategy="epoch",
-    learning_rate=args.lr, 
+    # learning_rate=args.lr, 
     seed=args.seed, 
     push_to_hub=False, 
-    dataloader_pin_memory=True, 
+    dataloader_pin_memory=False, # True, 
     num_of_batches=args.num_of_batches,
+    max_steps=args.max_steps,
 )
 
 trainer = AdaptorTrainer(
@@ -133,6 +173,8 @@ trainer = AdaptorTrainer(
     eval_dataset=val_dataset,  
     data_collator=None, 
     optimizers=(optimizer, lr_schedule),
-    # callbacks=[ExternalLoggingCallback()],
+    callbacks=[ExternalLoggingCallback()],
 )
+
+# torch.multiprocessing.set_start_method('spawn')
 trainer.train()

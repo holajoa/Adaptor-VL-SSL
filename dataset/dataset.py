@@ -69,18 +69,18 @@ def multimodal_collator(*args, **kwargs):
     return d
 
 
-class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
-    def __init__(self, text_embeds_raw, image_embeds_raw):
-        assert len(text_embeds_raw) == len(image_embeds_raw), "text and image embeds must have the same length"
-        self.text_embeds_raw = text_embeds_raw
-        self.image_embeds_raw = image_embeds_raw
+# class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
+#     def __init__(self, text_embeds_raw, image_embeds_raw):
+#         assert len(text_embeds_raw) == len(image_embeds_raw), "text and image embeds must have the same length"
+#         self.text_embeds_raw = text_embeds_raw
+#         self.image_embeds_raw = image_embeds_raw
         
-    def __len__(self):
-        return len(self.text_embeds_raw)
+#     def __len__(self):
+#         return len(self.text_embeds_raw)
     
-    def __getitem__(self, idx):
-        return {'text_embeds_raw':self.text_embeds_raw[idx], 
-                'image_embeds_raw':self.image_embeds_raw[idx]}
+#     def __getitem__(self, idx):
+#         return {'text_embeds_raw':self.text_embeds_raw[idx], 
+#                 'image_embeds_raw':self.image_embeds_raw[idx]}
         
 
 # class MultimodalPretrainedEmbeddingsDatasetLoader(object):
@@ -155,7 +155,7 @@ class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
         
         assert self.text_tensor_names == self.image_tensor_names, "text and image tensor names do not match"
         self.batch_size = torch.load(os.path.join(self.text_embeds_raw_dir, self.text_tensor_names[0]), 
-                                     map_location=self.device)[0].shape[0]
+                                     map_location='cpu')[0].shape[0]
         
     def __getitem__(self, idx):
         batch_idx = idx // self.batch_size
@@ -169,26 +169,65 @@ class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
             image_tensor = image_tensor['z']
         image_tensor = image_tensor[batch_item_idx]
         
-        print('Single sample loaded. ')
+        # print('Single sample loaded. ')
         return {'text_embeds_raw':text_tensor, 'image_embeds_raw':image_tensor}
 
     def __len__(self):
         return self.num_of_batches * self.batch_size
     
     
-class PredefinedBatchSampler(Sampler): 
-    def __init__(self, num_of_batches, batch_size, data_source, random_state=42, *args, **kwargs):
-        import random 
-        
-        super().__init__(data_source=data_source, *args, **kwargs)
+class MultimodalPretrainedEmbeddingsIterableDataset(torch.utils.data.IterableDataset):
+    def __init__(
+        self, 
+        text_embeds_raw_dir: str,
+        image_embeds_raw_dir: str,
+        split: str='train',
+        device='cpu',
+        num_of_batches=-1, 
+        shuffle=True,
+    ):
+        super().__init__()
+        self.text_embeds_raw_dir = os.path.join(text_embeds_raw_dir, split)
+        self.image_embeds_raw_dir = os.path.join(image_embeds_raw_dir, split)
+        self.device = torch.device(device)
         self.num_of_batches = num_of_batches
-        self.batch_size = batch_size
-        self.samples = [list(range(ib, ib+self.batch_size)) for ib 
-                        in range(0, self.num_of_batches*self.batch_size, self.batch_size)]
-        random.seed(random_state)
-        random.shuffle(self.samples)
         
+        self.text_tensor_names = sorted([f for f in os.listdir(self.text_embeds_raw_dir)],
+                                        key=lambda x: int(x.split('_')[1].split('.')[0]))
+        self.image_tensor_names = sorted([f for f in os.listdir(self.image_embeds_raw_dir)], 
+                                         key=lambda x: int(x.split('_')[1].split('.')[0]))
+        if self.num_of_batches > 0 and self.num_of_batches < len(self.text_tensor_names):
+            self.text_tensor_names = self.text_tensor_names[:self.num_of_batches]
+            self.image_tensor_names = self.image_tensor_names[:self.num_of_batches]
+        else:
+            self.num_of_batches = len(self.text_tensor_names)
+        
+        if shuffle:
+            self.shuffle_batches()
+        
+        assert self.text_tensor_names == self.image_tensor_names, "text and image tensor names do not match"
+        self.batch_size = torch.load(os.path.join(self.text_embeds_raw_dir, self.text_tensor_names[0]), 
+                                     map_location='cpu')[0].shape[0]
+    
+    def process_single_tensor_file(self, text_tensor, image_tensor):
+        for tt, it in zip(text_tensor, image_tensor):
+            yield {'text_embeds_raw':tt, 'image_embeds_raw':it}
+    
+    def shuffle_batches(self):
+        shuffled_idx = torch.randperm(self.num_of_batches)
+        self.text_tensor_names = [self.text_tensor_names[i] for i in shuffled_idx]
+        self.image_tensor_names = [self.image_tensor_names[i] for i in shuffled_idx]
+    
     def __iter__(self):
-        for batch in self.samples:
-            assert len(batch) == self.batch_size, "batch size does not match"
-            yield batch
+        for text_tensor_name, image_tensor_name in zip(self.text_tensor_names, self.image_tensor_names):
+            text_tensor = torch.load(os.path.join(self.text_embeds_raw_dir, text_tensor_name), 
+                                     map_location=self.device)
+            image_tensor = torch.load(os.path.join(self.image_embeds_raw_dir, image_tensor_name), 
+                                      map_location=self.device)
+            if isinstance(image_tensor, dict):  ### For ResNetAE
+                image_tensor = image_tensor['z']
+            
+            yield from self.process_single_tensor_file(text_tensor, image_tensor)
+    
+    def __len__(self):
+        return self.num_of_batches * self.batch_size
