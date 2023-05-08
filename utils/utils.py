@@ -31,6 +31,7 @@ def get_image_embeds_raw(
     save_path='./weights/image_embeds',
     model_name='',
     split='train', 
+    device='cuda',
 ):    
     if model_name:
         save_path = os.path.join(save_path, model_name)
@@ -71,9 +72,10 @@ def get_text_embeds_raw(
     dataloader, 
     text_model,
     save_path='./weights/text_embeds',
-    removed_arguments=['cap_lens', 'pixel_values', 'path'], 
+    removed_arguments=['cap_lens', 'pixel_values', 'path', 'return_loss'], 
     model_name='', 
     split='train', 
+    device='cuda',
 ):  
     if model_name:
         save_path = os.path.join(save_path, model_name)
@@ -86,8 +88,8 @@ def get_text_embeds_raw(
     with torch.no_grad():
         for batch_idx, inputs in enumerate(tqdm(dataloader)):
             [inputs.pop(key, None) for key in removed_arguments]
-            # for k, v in inputs.items():
-            #     inputs[k] = v.to(device=device)
+            for k, v in inputs.items():
+                inputs[k] = v.to(device=device)
             text_outputs = text_model(
                 **inputs, 
                 output_attentions=False,

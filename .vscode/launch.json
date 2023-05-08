@@ -30,7 +30,7 @@
                 "--batch_size", 
                 "128", 
                 "--data_pct", 
-                "0.01", 
+                "1.0", 
                 "--num_hidden_layers", 
                 "1", 
                 "--num_of_batches", 
