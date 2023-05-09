@@ -73,7 +73,9 @@
                 "--seed", 
                 "42", 
                 "--output_dir", 
-                "./results/BioBERT_ResNetAE"
+                "./results/BioBERT_ResNetAE", 
+                // "--force_rebuild_dataset", 
+                "--num_workers", "8", 
             ], 
             "justMyCode": false, 
         }

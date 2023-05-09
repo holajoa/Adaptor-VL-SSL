@@ -6,11 +6,10 @@ from mgca.datasets.pretrain_dataset import (
 from mgca.constants import *
 
 from transformers import BertTokenizer
+from transformers.tokenization_utils import PreTrainedTokenizerBase
 from datasets import Dataset, concatenate_datasets
 
 import torch 
-import torch.nn as nn
-from torch.utils.data.dataloader import Sampler, SequentialSampler
 import os
 from pathlib import Path
 import pickle
@@ -25,7 +24,7 @@ class MultimodalPretrainingDatasetForAdaptor(MultimodalPretrainingDataset):
                          imsize=imsize, max_words=max_words, sent_num=sent_num)
         if isinstance(tokenizer, str):
             self.tokenizer = BertTokenizer.from_pretrained(tokenizer)
-        elif isinstance(tokenizer, nn.Module):
+        elif isinstance(tokenizer, PreTrainedTokenizerBase):
             self.tokenizer = tokenizer
     
     def load_text_data(self, split):

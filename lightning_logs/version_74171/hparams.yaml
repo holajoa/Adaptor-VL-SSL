@@ -1,0 +1,8 @@
+adaptor_config: null
+add_cls_token: true
+logit_scale_init_value: 2.6592
+lr: 0.0001
+num_hidden_layers: 1
+projection_dim: 768
+vision_model_type: ae
+vision_output_dim: 512

@@ -53,6 +53,8 @@ parser.add_argument('--num_train_epochs', type=int, default=1)
 parser.add_argument('--seed', type=int, default=1117)
 parser.add_argument('--output_dir', type=str, default='./results', help='path to save model')
 
+parser.add_argument('--local_rank', default=-1, type=int, help='node rank for distributed training')
+
 
 args = parser.parse_args()
 
@@ -109,6 +111,7 @@ train_dataset = pickle_dataset(
     transform=data_transforms(True, args.crop_size), 
     data_pct=args.data_pct, 
     force_rebuild=args.force_rebuild_dataset, 
+    tokenizer=tokenizer,
 )
 val_dataset = pickle_dataset(
     val_dataset_pkl,
@@ -116,6 +119,7 @@ val_dataset = pickle_dataset(
     transform=data_transforms(False, args.crop_size),
     data_pct=args.data_pct, 
     force_rebuild=args.force_rebuild_dataset, 
+    tokenizer=tokenizer,
 )
 
 ### Training
