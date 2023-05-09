@@ -138,7 +138,7 @@ if __name__ == '__main__':
     from time import gmtime, strftime
 
     log_fn = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
-    logging.basicConfig(filename=f'{log_fn}.log', encoding='utf-8', level=logging.INFO)
+    logging.basicConfig(filename=f'logs/train_{log_fn}.log', encoding='utf-8', level=logging.INFO)
 
     num_of_gpus = torch.cuda.device_count()
     logging.info(f"Number of available GPUs = {num_of_gpus}: "
