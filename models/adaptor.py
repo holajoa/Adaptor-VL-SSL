@@ -1,6 +1,11 @@
+from typing import List, Union, Tuple, Dict, Optional
+
 import torch 
 import torch.nn as nn
-from typing import List, Union, Tuple, Dict, Optional
+
+import pytorch_lightning as pl
+from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning.callbacks import TQDMProgressBar
 
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertEncoder, BertPooler
@@ -11,14 +16,16 @@ from transformers.modeling_outputs import (
 from transformers.modeling_utils import ModuleUtilsMixin
 from transformers.models.clip.modeling_clip import CLIPOutput
 from transformers.models.clip.modeling_clip import clip_loss
-from transformers import Trainer, TrainerCallback, TrainingArguments
 
 from torch.utils.data import DataLoader
-from torch.utils.data.dataloader import BatchSampler
-from transformers.trainer_callback import TrainerControl, TrainerState
-from transformers.training_args import TrainingArguments
-# from dataset.dataset import PredefinedBatchSampler
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+
+from utils.utils import freeze_encoder
+
 import logging
+from tqdm import tqdm
+import sys
 
 
 class AdaptorModule(nn.Module, ModuleUtilsMixin):
@@ -160,7 +167,7 @@ class Project(nn.Module):
         
         return image_embeds, text_embeds
 
-class Adaptor(nn.Module):
+class Adaptor(pl.LightningModule):
     def __init__(
         self, 
         text_model:nn.Module,
@@ -172,6 +179,7 @@ class Adaptor(nn.Module):
         projection_dim:int=512,
         num_hidden_layers:int=2,
         add_cls_token:bool=False,
+        lr:float=1e-4,
     ):
         super(Adaptor, self).__init__()
         
@@ -193,6 +201,11 @@ class Adaptor(nn.Module):
         if self.vision_model_type != 'transformer':
             assert vision_output_dim is not None, \
                 'Please provide vision_output_dim for non transformer vision models'
+        
+        self.lr = lr
+        freeze_encoder(self)
+        
+        self.save_hyperparameters(ignore=["text_model", "vision_model"])
         
     def forward(
         self,
@@ -281,14 +294,36 @@ class Adaptor(nn.Module):
             # text_model_output=text_outputs,
             # vision_model_output=vision_outputs,
         )
+    
+    def training_step(self, batch, batch_idx):
+        outputs = self(**batch)
+        loss = outputs.loss
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.lr_schedulers().step()
+        return loss
+    
+    def _shared_eval(self, batch, batch_idx, prefix):
+        outputs = self(**batch)
+        loss = outputs.loss
+        self.log(f'{prefix}_loss', loss)
         
+    def validation_step(self, batch, batch_idx):
+        self._shared_eval(batch, batch_idx, "val")
 
-class AdaptorTrainingArguments(TrainingArguments):
+    def test_step(self, batch, batch_idx):
+        self._shared_eval(batch, batch_idx, "test")
+
+    def configure_optimizers(self):
+        optimizer = AdamW(self.parameters(), lr=self.lr, weight_decay=0.05)
+        lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=2, eta_min=self.lr/10)
+        return {'optimizer':optimizer, 'lr_scheduler':lr_schedule}
+    
+        
+class AdaptorTrainer(Trainer):
     def __init__(self, num_of_batches=-1, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._num_of_batches = num_of_batches
         
-class AdaptorTrainer(Trainer):
     def get_train_dataloader(self) -> DataLoader:
         """
         Returns the training [`~torch.utils.data.DataLoader`].
@@ -307,16 +342,6 @@ class AdaptorTrainer(Trainer):
         data_collator = self.data_collator
 
         train_sampler = self._get_train_sampler()
-        # train_sampler = BatchSampler(
-        #     sampler=PredefinedBatchSampler(
-        #         data_source=self.train_dataset, 
-        #         num_of_batches=self.args._num_of_batches, 
-        #         batch_size=self.args.per_device_train_batch_size, 
-        #     ), 
-        #     batch_size=self.args.per_device_train_batch_size,
-        #     drop_last=False, 
-        # )
-        
         return DataLoader(
             train_dataset,
             batch_size=self._train_batch_size,
@@ -328,12 +353,21 @@ class AdaptorTrainer(Trainer):
             worker_init_fn=seed_worker,
         )
         
-class ExternalLoggingCallback(TrainerCallback):
-    def on_log(self, args, state, control, logs=None, **kwargs):
-        _ = logs.pop("total_flos", None)
-        if state.is_local_process_zero:
-            logging.info(logs)
-    
-    def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        
-        return super().on_evaluate(args, state, control, **kwargs)
+class StreamingProgressBar(TQDMProgressBar):
+    def __init__(self, total:int, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._total = total
+         
+    def init_train_tqdm(self):
+        bar = tqdm(
+            desc='Training',
+            initial=self.train_batch_idx,
+            position=(2 * self.process_position),
+            disable=self.is_disabled,
+            leave=True,
+            dynamic_ncols=True,
+            file=sys.stdout,
+            smoothing=0,
+            total=self._total,
+        )
+        return bar
