@@ -1,14 +1,7 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, TensorDataset, DataLoader
 
-import os
-from tqdm import tqdm
-
-from dataset.dataset import (
-    MultimodalPretrainedEmbeddingsIterableDataset, 
-    MultimodalPretrainedEmbeddingsDataset, 
-)
+from dataset.dataset import MultimodalPretrainedEmbeddingsIterableDataset
 
 from models.adaptor import Adaptor, AdaptorTrainer, AdaptorTrainingArguments, ExternalLoggingCallback
 from models.configurations import (
@@ -20,22 +13,12 @@ from models.configurations import (
 from utils.utils import load_timm_model, freeze_encoder
 from utils.model_utils import load_vision_model
 from utils.dataset_utils import torch2huggingface_dataset
-from transformers import AutoTokenizer
 from transformers import BertModel
-from transformers import TrainingArguments
 
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
-import torch.multiprocessing as mp
-from torch.utils.data.distributed import DistributedSampler
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed import init_process_group, destroy_process_group
-
-from datasets import Dataset
-
 import argparse
-
 import logging
 
 # SAVED_EMBEDDINGS_DIR = '/vol/bitbucket/jq619/individual-project/saved_embeddings'
