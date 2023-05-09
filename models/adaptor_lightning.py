@@ -26,6 +26,10 @@ import logging
 
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning.callbacks import TQDMProgressBar
+
+from tqdm import tqdm
+import sys
 
 
 class AdaptorModule(nn.Module, ModuleUtilsMixin):
@@ -318,12 +322,6 @@ class Adaptor(pl.LightningModule):
         lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=2, eta_min=self.lr/10)
         return {'optimizer':optimizer, 'lr_scheduler':lr_schedule}
     
-
-# class AdaptorTrainingArguments(TrainingArguments):
-#     def __init__(self, num_of_batches=-1, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         self._num_of_batches = num_of_batches
-        
         
 class AdaptorTrainer(Trainer):
     def __init__(self, num_of_batches=-1, *args, **kwargs):
@@ -359,11 +357,21 @@ class AdaptorTrainer(Trainer):
             worker_init_fn=seed_worker,
         )
         
-# class ExternalLoggingCallback(TrainerCallback):
-#     def on_log(self, args, state, control, logs=None, **kwargs):
-#         _ = logs.pop("total_flos", None)
-#         if state.is_local_process_zero:
-#             logging.info(logs)
-    
-#     def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-#         return super().on_evaluate(args, state, control, **kwargs)
+class StreamingProgressBar(TQDMProgressBar):
+    def __init__(self, total:int, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._total = total
+         
+    def init_train_tqdm(self):
+        bar = tqdm(
+            desc='Training',
+            initial=self.train_batch_idx,
+            position=(2 * self.process_position),
+            disable=self.is_disabled,
+            leave=True,
+            dynamic_ncols=True,
+            file=sys.stdout,
+            smoothing=0,
+            total=self._total,
+        )
+        return bar

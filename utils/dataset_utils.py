@@ -22,10 +22,11 @@ def get_dataloader(
     num_workers=16,
     collate_fn=None,
     shuffle=False,
+    pin_memory=True,
 ):
     return DataLoader(
         dataset, 
-        pin_memory=True, 
+        pin_memory=pin_memory, 
         drop_last=True,
         shuffle=shuffle,
         batch_size=batch_size,
