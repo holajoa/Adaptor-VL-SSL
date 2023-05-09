@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
-from utils.utils import freeze_encoder
+from utils.model_utils import freeze_encoder
 
 import logging
 from tqdm import tqdm
