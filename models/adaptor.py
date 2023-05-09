@@ -14,10 +14,8 @@ from transformers.models.clip.modeling_clip import clip_loss
 from transformers import Trainer, TrainerCallback, TrainingArguments
 
 from torch.utils.data import DataLoader
-from torch.utils.data.dataloader import BatchSampler
 from transformers.trainer_callback import TrainerControl, TrainerState
 from transformers.training_args import TrainingArguments
-# from dataset.dataset import PredefinedBatchSampler
 import logging
 
 
@@ -287,6 +285,7 @@ class AdaptorTrainingArguments(TrainingArguments):
     def __init__(self, num_of_batches=-1, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._num_of_batches = num_of_batches
+ 
         
 class AdaptorTrainer(Trainer):
     def get_train_dataloader(self) -> DataLoader:
@@ -307,15 +306,6 @@ class AdaptorTrainer(Trainer):
         data_collator = self.data_collator
 
         train_sampler = self._get_train_sampler()
-        # train_sampler = BatchSampler(
-        #     sampler=PredefinedBatchSampler(
-        #         data_source=self.train_dataset, 
-        #         num_of_batches=self.args._num_of_batches, 
-        #         batch_size=self.args.per_device_train_batch_size, 
-        #     ), 
-        #     batch_size=self.args.per_device_train_batch_size,
-        #     drop_last=False, 
-        # )
         
         return DataLoader(
             train_dataset,

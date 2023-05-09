@@ -109,6 +109,7 @@ train_dataset = pickle_dataset(
     transform=data_transforms(True, args.crop_size), 
     data_pct=args.data_pct, 
     force_rebuild=args.force_rebuild_dataset, 
+    tokenizer=tokenizer,
 )
 val_dataset = pickle_dataset(
     val_dataset_pkl,
@@ -116,6 +117,7 @@ val_dataset = pickle_dataset(
     transform=data_transforms(False, args.crop_size),
     data_pct=args.data_pct, 
     force_rebuild=args.force_rebuild_dataset, 
+    tokenizer=tokenizer,
 )
 
 ### Training
