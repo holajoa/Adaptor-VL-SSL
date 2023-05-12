@@ -79,17 +79,13 @@ def get_text_embeds_raw(
     split='train', 
     device='cuda',
 ):  
-    # if model_name:
-    #     save_path = os.path.join(save_path, model_name)
     assert model_name, 'model_name must be specified.'
     model_name = model_name.replace('/', '_')
-    # save_path = os.path.join(save_path, split)
     if not os.path.exists(save_path):
         os.makedirs(save_path)
     
     # Initialise empty npy
     num_batches = len(dataloader)
-    batch_size = next(iter(dataloader)).shape[0]
     out = torch.empty(num_batches*batch_size, embedding_dim, device=device) 
     
     # device = text_model.device
@@ -99,12 +95,11 @@ def get_text_embeds_raw(
             [inputs.pop(key, None) for key in removed_arguments]
             for k, v in inputs.items():
                 inputs[k] = v.to(device=device)
-            text_outputs = text_model(
+            text_embeds_raw = text_model(
                 **inputs, 
                 output_attentions=False,
                 output_hidden_states=True,
                 return_dict=True,
-            )
-            text_embeds_raw = text_outputs.last_hidden_state
+            ).pooler_output
             out[batch_idx*batch_size:(batch_idx+1)*batch_size] = text_embeds_raw
         np.save(os.path.join(save_path, f'{model_name}_{split}.npy'), out.cpu().numpy())
