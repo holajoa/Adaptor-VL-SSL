@@ -2,27 +2,25 @@ from mgca.datasets.transforms import DataTransforms
 from utils.dataset_utils import AutoEncoderDataTransforms
 
 
-TEXT_PRETRAINED_AVAILABLE = [
-    "bert-base-uncased", 
-    "dmis-lab/biobert-v1.1", 
-    "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext", 
-    "microsoft/BiomedVLP-CXR-BERT-general", 
-    "./weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint", 
-]
-
-VISION_PRETRAINED_AVAILABLE = {
-    ### pretrained_weight: vision_model_type
-    "101-elastic": "ae", 
-    "swin_base_patch4_window7_224": "timm",
+TEXT_PRETRAINED = {
+    'bert': 'bert-base-uncased',
+    'biobert': 'dmis-lab/biobert-v1.1',
+    'pubmedbert': 'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext',
+    'cxrbert': 'microsoft/BiomedVLP-CXR-BERT-general',
+    'clinicalbert': './weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint',
 }
 
-VISION_MODEL_TYPE_2_DATA_TRANSFORM = {
-    'ae': AutoEncoderDataTransforms,
-    'timm': DataTransforms,
-    'huggingface': DataTransforms,
-}
-
-VISION_MODEL_TYPE_2_VISION_OUTPUT_DIM = {
-    'ae': 512,
-    'timm': 1024, 
+VISION_PRETRAINED = {
+    'resnet-ae':{
+        'pretrained_weight': '101-elastic',
+        'vision_model_type': 'ae', 
+        'data_transform': AutoEncoderDataTransforms,
+        'vision_output_dim': 512,
+    }, 
+    'swin-base':{
+        'pretrained_weight': 'swin_base_patch4_window7_224',
+        'vision_model_type': 'timm',
+        'data_transform': DataTransforms,
+        'vision_output_dim': 1024,
+    }
 }
