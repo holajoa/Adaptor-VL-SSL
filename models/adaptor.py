@@ -31,7 +31,6 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         self, 
         config:Optional[BertConfig]=None, 
         num_hidden_layers:int=2, 
-        add_vision_cls_token:bool=False, 
     ):
         super(AdaptorModule, self).__init__()
         if config is not None:
@@ -39,12 +38,7 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         else:
             self.config = BertConfig(num_hidden_layers=num_hidden_layers)
         
-        add_vision_cls_token = False
-        if add_vision_cls_token:
-            self.cls_token = nn.Parameter(torch.zeros((1, self.config.hidden_size)))
-            self.embeddings = lambda t, i: torch.cat([t, self.cls_token.repeat(t.size(0), 1, 1).to(t.device), i], dim=1)
-        else:
-            self.embeddings = lambda t, i: torch.stack([t, i], dim=1)
+        self.embeddings = lambda t, i: torch.stack([t, i], dim=1)
         self.encoder = BertEncoder(self.config)
         self.pooler = BertPooler(self.config)
 
@@ -176,7 +170,6 @@ class Adaptor(pl.LightningModule):
         logit_scale_init_value:float=2.6592,  # logit_scale = 1 / temperature
         projection_dim:int=512,
         num_hidden_layers:int=2,
-        add_cls_token:bool=False,
         lr:float=1e-4,
     ):
         super(Adaptor, self).__init__()
@@ -188,7 +181,7 @@ class Adaptor(pl.LightningModule):
             vision_embed_dim=vision_output_dim, 
             projection_dim=projection_dim, 
         )
-        self.adaptor_module = AdaptorModule(adaptor_config, num_hidden_layers, add_cls_token)
+        self.adaptor_module = AdaptorModule(adaptor_config, num_hidden_layers)
         self.vision_model_type = vision_model_type
         self.vision_output_dim = vision_output_dim
         self.projection_dim = projection_dim

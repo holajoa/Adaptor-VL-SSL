@@ -1,36 +1,37 @@
 import torch 
-import torch.nn as nn
-
-
-from typing import List, Union, Tuple, Dict, Optional
-
-import numpy as np
 
 from transformers import AutoTokenizer
 from transformers import BertModel
+from pytorch_lightning import Trainer, seed_everything
 
 from models.adaptor import Adaptor
-from models.configurations import (
-    TEXT_PRETRAINED_AVAILABLE,
-    VISION_PRETRAINED_AVAILABLE,
-    VISION_MODEL_TYPE_2_DATA_TRANSFORM,
-    VISION_MODEL_TYPE_2_VISION_OUTPUT_DIM, 
-)
+from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
 from utils.dataset_utils import pickle_dataset, get_dataloader
 from utils.model_utils import load_vision_model
-
-# from transformers import TrainingArguments, Trainer
-from pytorch_lightning import Trainer, seed_everything
 from dataset.dataset import multimodal_collator
+
 import argparse 
 import logging
 
 
 def main(args):
+    if args.vision_model not in VISION_PRETRAINED.keys():
+        raise ValueError(f'Vision model {args.vision_model} not available.'
+                         f'Choose from {list(VISION_PRETRAINED.keys())}')
+        
+    if args.text_model not in TEXT_PRETRAINED.keys():
+        raise ValueError(f'Text model {args.text_model} not available.'
+                         f'Choose from {list(TEXT_PRETRAINED.keys())}')
+        
+    vision_model_config = VISION_PRETRAINED[args.vision_model]
+    args.vision_pretrained = vision_model_config['pretrained_weight']
+    args.vision_model_type = vision_model_config['vision_model_type']
+    args.vision_output_dim = vision_model_config['vision_output_dim']
+    data_transforms = vision_model_config['data_transform']
+    
+    args.text_pretrained = TEXT_PRETRAINED[args.text_model]
+
     ### Load vision model
-    if args.vision_pretrained in VISION_PRETRAINED_AVAILABLE.keys():
-        assert VISION_PRETRAINED_AVAILABLE[args.vision_pretrained] == args.vision_model_type, \
-            'Vision model type does not match pretrained model'
     vision_model = load_vision_model(args.vision_model_type, args.vision_pretrained)
 
     ### Load text model
@@ -38,22 +39,17 @@ def main(args):
     tokenizer = AutoTokenizer.from_pretrained(args.text_pretrained)
 
     ### Define model
-    add_cls_token = args.vision_model_type == 'ae'
-    vision_output_dim = VISION_MODEL_TYPE_2_VISION_OUTPUT_DIM[args.vision_model_type]
     model = Adaptor(
         text_model=text_model,
         vision_model=vision_model,
         vision_model_type=args.vision_model_type, 
-        vision_output_dim=vision_output_dim,
+        vision_output_dim=args.vision_output_dim,
         projection_dim=args.projection_dim,
         num_hidden_layers=args.num_hidden_layers, 
-        add_cls_token=add_cls_token,
         lr=args.lr, 
     )
 
     ### Load dataset
-    data_transforms = VISION_MODEL_TYPE_2_DATA_TRANSFORM[args.vision_model_type]
-
     train_dataset_pkl = f'saved_datasets/train_dataset_{args.vision_model_type}.pkl'
     val_dataset_pkl = f'saved_datasets/val_dataset_{args.vision_model_type}.pkl'
 
@@ -105,13 +101,9 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--vision_pretrained', type=str, help='Choose from [101-elastic, swin_base_patch4_window7_224]')
-    parser.add_argument('--vision_model_type', type=str, help='Choose from [timm, ae, huggingface]')
-    parser.add_argument('--text_pretrained', type=str, 
-                        help='Choose from [bert-base-uncased, dmis-lab/biobert-v1.1, '
-                        'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext, '
-                        'microsoft/BiomedVLP-CXR-BERT-general, '
-                        './weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint]')
+    parser.add_argument('--vision_model', type=str, help='Choose from [resnet-ae, swin-base]')
+    parser.add_argument('--text_model', type=str, 
+                        help='Choose from [bert, biobert, pubmedbert, cxrbert, clinicalbert]')
     
     parser.add_argument('--batch_size', type=int, default=128)
 

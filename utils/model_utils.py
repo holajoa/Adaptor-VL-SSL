@@ -1,8 +1,3 @@
-from models.configurations import (
-    TEXT_PRETRAINED_AVAILABLE,
-    VISION_PRETRAINED_AVAILABLE,
-    VISION_MODEL_TYPE_2_DATA_TRANSFORM,
-)
 from transformers import AutoModel
 from typing import Optional 
 
