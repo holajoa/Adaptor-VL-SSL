@@ -1,6 +1,11 @@
+from typing import List, Union, Tuple, Dict, Optional
+
 import torch 
 import torch.nn as nn
-from typing import List, Union, Tuple, Dict, Optional
+
+import pytorch_lightning as pl
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import TQDMProgressBar
 
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertEncoder, BertPooler
@@ -11,14 +16,14 @@ from transformers.modeling_outputs import (
 from transformers.modeling_utils import ModuleUtilsMixin
 from transformers.models.clip.modeling_clip import CLIPOutput
 from transformers.models.clip.modeling_clip import clip_loss
-from transformers import Trainer, TrainerCallback, TrainingArguments
 
 from torch.utils.data import DataLoader
-from torch.utils.data.dataloader import BatchSampler
-from transformers.trainer_callback import TrainerControl, TrainerState
-from transformers.training_args import TrainingArguments
-from dataset.dataset import PredefinedBatchSampler
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+
 import logging
+from tqdm import tqdm
+import sys
 
 
 class AdaptorModule(nn.Module, ModuleUtilsMixin):
@@ -26,7 +31,6 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         self, 
         config:Optional[BertConfig]=None, 
         num_hidden_layers:int=2, 
-        add_vision_cls_token:bool=False, 
     ):
         super(AdaptorModule, self).__init__()
         if config is not None:
@@ -34,11 +38,7 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         else:
             self.config = BertConfig(num_hidden_layers=num_hidden_layers)
         
-        if add_vision_cls_token:
-            self.cls_token = nn.Parameter(torch.zeros((1, self.config.hidden_size)))
-            self.embeddings = lambda t, i: torch.cat([t, self.cls_token.repeat(t.size(0), 1, 1).to(t.device), i], dim=1)
-        else:
-            self.embeddings = lambda t, i: torch.cat([t, i], dim=1)
+        self.embeddings = lambda t, i: torch.stack([t, i], dim=1)
         self.encoder = BertEncoder(self.config)
         self.pooler = BertPooler(self.config)
 
@@ -79,8 +79,6 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
-        
-        # token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
         
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -160,7 +158,8 @@ class Project(nn.Module):
         
         return image_embeds, text_embeds
 
-class Adaptor(nn.Module):
+
+class Adaptor(pl.LightningModule):
     def __init__(
         self, 
         text_model:nn.Module,
@@ -171,7 +170,7 @@ class Adaptor(nn.Module):
         logit_scale_init_value:float=2.6592,  # logit_scale = 1 / temperature
         projection_dim:int=512,
         num_hidden_layers:int=2,
-        add_cls_token:bool=False,
+        lr:float=1e-4,
     ):
         super(Adaptor, self).__init__()
         
@@ -182,7 +181,7 @@ class Adaptor(nn.Module):
             vision_embed_dim=vision_output_dim, 
             projection_dim=projection_dim, 
         )
-        self.adaptor_module = AdaptorModule(adaptor_config, num_hidden_layers, add_cls_token)
+        self.adaptor_module = AdaptorModule(adaptor_config, num_hidden_layers)
         self.vision_model_type = vision_model_type
         self.vision_output_dim = vision_output_dim
         self.projection_dim = projection_dim
@@ -193,6 +192,11 @@ class Adaptor(nn.Module):
         if self.vision_model_type != 'transformer':
             assert vision_output_dim is not None, \
                 'Please provide vision_output_dim for non transformer vision models'
+        
+        self.lr = lr
+        freeze_encoder(self)
+        
+        self.save_hyperparameters(ignore=["text_model", "vision_model"])
         
     def forward(
         self,
@@ -219,18 +223,19 @@ class Adaptor(nn.Module):
                     output_hidden_states=output_hidden_states,
                     return_dict=return_dict,
                 )
-                image_embeds_raw = vision_outputs.last_hidden_state
+                image_embeds_raw = vision_outputs.pooler_output
             elif self.vision_model_type == 'timm':
-                image_embeds_raw = self.vision_model(pixel_values)
+                image_embeds_raw = self.vision_model(pixel_values)[:, 0, :]
             elif self.vision_model_type == 'ae':
                 vision_outputs = self.vision_model(pixel_values)
-                image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
+                image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1)).mean(1)
             else: 
                 logging.ERROR(f'{self.vision_model_type} is not supported.')
         else:
             # logging.info('Using precomputed image_embeds_raw.')
             if self.vision_model_type == 'ae' and len(image_embeds_raw.shape) == 4:
-                image_embeds_raw = torch.flatten(image_embeds_raw, start_dim=2).permute((0, 2, 1))
+                image_embeds_raw = torch.flatten(image_embeds_raw, start_dim=2).permute((0, 2, 1)).mean(1)
+        assert len(image_embeds_raw.shape) == 2
         
         if text_embeds_raw is None:
             assert input_ids is not None, \
@@ -244,16 +249,15 @@ class Adaptor(nn.Module):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            text_embeds_raw = text_outputs.last_hidden_state
+            text_embeds_raw = text_outputs.pooler_output
         # else:
         #     logging.info('Using precomputed text_embeds_raw.')
         
         image_embeds, text_embeds = self.projection(text_embeds_raw, image_embeds_raw)
         outputs = self.adaptor_module(text_embeds, image_embeds)
         
-        text_seq_len = text_embeds.shape[1]
-        text_embeds = outputs.last_hidden_state[:, :text_seq_len, :]
-        image_embeds = outputs.last_hidden_state[:, text_seq_len:, :]
+        text_embeds = outputs.last_hidden_state[:, 0, :]
+        image_embeds = outputs.last_hidden_state[:, 1, :]
         
         # normalized features
         image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
@@ -261,7 +265,7 @@ class Adaptor(nn.Module):
         
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds[:, 0, :], image_embeds[:, 0, :].t()) * logit_scale   # [batch_size, batch_size]
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale   # [batch_size, batch_size]
         logits_per_image = logits_per_text.T
         
         loss = None
@@ -278,17 +282,38 @@ class Adaptor(nn.Module):
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
             image_embeds=image_embeds,
-            # text_model_output=text_outputs,
-            # vision_model_output=vision_outputs,
         )
+    
+    def training_step(self, batch, batch_idx):
+        outputs = self(**batch)
+        loss = outputs.loss
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.lr_schedulers().step()
+        return loss
+    
+    def _shared_eval(self, batch, batch_idx, prefix):
+        outputs = self(**batch)
+        loss = outputs.loss
+        self.log(f'{prefix}_loss', loss)
         
+    def validation_step(self, batch, batch_idx):
+        self._shared_eval(batch, batch_idx, "val")
 
-class AdaptorTrainingArguments(TrainingArguments):
+    def test_step(self, batch, batch_idx):
+        self._shared_eval(batch, batch_idx, "test")
+
+    def configure_optimizers(self):
+        optimizer = AdamW(self.parameters(), lr=self.lr, weight_decay=0.05)
+        lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=2, eta_min=self.lr/10)
+        return {'optimizer':optimizer, 'lr_scheduler':lr_schedule}
+    
+        
+class AdaptorTrainer(Trainer):
     def __init__(self, num_of_batches=-1, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._num_of_batches = num_of_batches
+ 
         
-class AdaptorTrainer(Trainer):
     def get_train_dataloader(self) -> DataLoader:
         """
         Returns the training [`~torch.utils.data.DataLoader`].
@@ -307,16 +332,7 @@ class AdaptorTrainer(Trainer):
         data_collator = self.data_collator
 
         train_sampler = self._get_train_sampler()
-        # train_sampler = BatchSampler(
-        #     sampler=PredefinedBatchSampler(
-        #         data_source=self.train_dataset, 
-        #         num_of_batches=self.args._num_of_batches, 
-        #         batch_size=self.args.per_device_train_batch_size, 
-        #     ), 
-        #     batch_size=self.args.per_device_train_batch_size,
-        #     drop_last=False, 
-        # )
-        
+
         return DataLoader(
             train_dataset,
             batch_size=self._train_batch_size,
@@ -328,12 +344,28 @@ class AdaptorTrainer(Trainer):
             worker_init_fn=seed_worker,
         )
         
-class ExternalLoggingCallback(TrainerCallback):
-    def on_log(self, args, state, control, logs=None, **kwargs):
-        _ = logs.pop("total_flos", None)
-        if state.is_local_process_zero:
-            logging.info(logs)
-    
-    def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        
-        return super().on_evaluate(args, state, control, **kwargs)
+class StreamingProgressBar(TQDMProgressBar):
+    def __init__(self, total:int, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._total = total
+         
+    def init_train_tqdm(self):
+        bar = tqdm(
+            desc='Training',
+            initial=self.train_batch_idx,
+            position=(2 * self.process_position),
+            disable=self.is_disabled,
+            leave=True,
+            dynamic_ncols=True,
+            file=sys.stdout,
+            smoothing=0,
+            total=self._total,
+        )
+        return bar
+
+
+def freeze_encoder(model:Adaptor):
+    for encoder in [model.text_model, model.vision_model]:
+        for param in encoder.parameters():
+            param.requires_grad = False
+            

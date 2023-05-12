@@ -4,31 +4,51 @@ from mgca.datasets.pretrain_dataset import (
     BASE_DIR, 
 )
 from mgca.constants import *
+from mgca.datasets.utils import get_imgs
 
 from transformers import BertTokenizer
+from transformers.tokenization_utils import PreTrainedTokenizerBase
 from datasets import Dataset, concatenate_datasets
 
 import torch 
-import torch.nn as nn
-from torch.utils.data.dataloader import Sampler, SequentialSampler
+
 import os
 from pathlib import Path
 import pickle
 
 from tqdm import tqdm
 
+from pandas import read_csv
+import numpy as np
 
-class MultimodalPretrainingDatasetForAdaptor(MultimodalPretrainingDataset):
-    def __init__(self, split="train", transform=None, data_pct=1.0,
-                 imsize=256, max_words=128, sent_num=3, tokenizer=None):
-        super().__init__(split=split, transform=transform, data_pct=data_pct, 
-                         imsize=imsize, max_words=max_words, sent_num=sent_num)
+from nltk.tokenize import RegexpTokenizer
+import re
+
+
+class MultimodalDataset(torch.utils.data.Dataset):
+    def __init__(self, 
+                 split='train', 
+                 transform=None, 
+                 data_pct=1.0, 
+                 imsize=256, 
+                 tokenizer=None,
+                 max_words=112):
+        super().__init__()
+        if not os.path.exists(MIMIC_CXR_DATA_DIR):
+            raise RuntimeError(f"{MIMIC_CXR_DATA_DIR} does not exist!")
+        
+        self.split = split
+        self.transform = transform
+        self.imsize = imsize
+        self.df = None
+        self.max_words = max_words
+        
         if isinstance(tokenizer, str):
             self.tokenizer = BertTokenizer.from_pretrained(tokenizer)
-        elif isinstance(tokenizer, nn.Module):
+        elif isinstance(tokenizer, PreTrainedTokenizerBase):
             self.tokenizer = tokenizer
-    
-    def load_text_data(self, split):
+        
+    def load_text_data(self):
         # get study to captions mapping
         # TODO: check this
         filepath = os.path.join(BASE_DIR, "../../data/captions.pickle")
@@ -55,79 +75,139 @@ class MultimodalPretrainingDatasetForAdaptor(MultimodalPretrainingDataset):
                     continue
                 ### End addition =================================================
                 
-                if cur_split == split and path in path2sent:
+                if cur_split == self.split and path in path2sent:
                     filenames.append(path)
                 
                 pbar.update(1)
         return filenames, path2sent
+    
+    def create_path_2_sent_mapping(self):
+        sent_lens, num_sents = [], []
+        path2sent = {}
+        # iterrows is not faster than itertuples ...  but it is ok
+        for _, row in tqdm(self.df.iterrows(), total=self.df.shape[0]):
+            # pick impression, findings, last_paragraph
+            captions = ""
+            captions += row["impression"]
+            captions += " "
+            captions += row["findings"]
 
-def multimodal_collator(*args, **kwargs):
-    d = multimodal_collate_fn(*args, **kwargs)
-    d['input_ids'] = d.pop('caption_ids')
-    d['pixel_values'] = d.pop('imgs')
-    d['return_loss'] = True
-    return d
+            # use space instead of newline
+            captions = captions.replace("\n", " ")
 
+            # split sentences
+            splitter = re.compile("[0-9]+\.")
+            captions = splitter.split(captions)
+            captions = [point.split(".") for point in captions]
+            captions = [sent for point in captions for sent in point]
 
-class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
-    def __init__(self, text_embeds_raw, image_embeds_raw):
-        assert len(text_embeds_raw) == len(image_embeds_raw), "text and image embeds must have the same length"
-        self.text_embeds_raw = text_embeds_raw
-        self.image_embeds_raw = image_embeds_raw
-        
+            cnt = 0
+            study_sent = []
+            # create tokens from captions
+            for cap in captions:
+                if len(cap) == 0:
+                    continue
+
+                cap = cap.replace("\ufffd\ufffd", " ")
+                # picks out sequences of alphanumeric characters as tokens
+                # and drops everything else
+                tokenizer = RegexpTokenizer(r"\w+")
+                tokens = tokenizer.tokenize(cap.lower())
+                # TODO: < 3 has instances of ['no', 'pneumothorax'], ['clear', 'lung']
+                if len(tokens) <= 1:
+                    continue
+
+                # filter tokens for current sentence
+                included_tokens = []
+                for t in tokens:
+                    t = t.encode("ascii", "ignore").decode("ascii")
+                    if len(t) > 0:
+                        included_tokens.append(t)
+
+                if len(included_tokens) > 0:
+                    study_sent.append(" ".join(included_tokens))
+
+                cnt += len(included_tokens)
+
+            if cnt >= 3:
+                sent_lens.append(cnt)
+                num_sents.append(len(study_sent))
+                path2sent[row[MIMIC_CXR_PATH_COL]] = study_sent
+
+        # get report word/setence statistics
+        sent_lens = np.array(sent_lens)
+        num_sents = np.array(num_sents)
+
+        print(
+            f"sent lens: {sent_lens.min()},{sent_lens.mean()},{sent_lens.max()} [{np.percentile(sent_lens, 5)}, {np.percentile(sent_lens, 95)}]"
+        )
+        print(
+            f"num sents: {num_sents.min()},{num_sents.mean()},{num_sents.max()} [{np.percentile(num_sents, 5)}, {np.percentile(num_sents, 95)}]"
+        )
+
+        return path2sent
+    
+    def get_caption(self, path):
+        series_sents = self.path2sent[path]
+
+        if len(series_sents) == 0:
+            raise Exception("no sentence for path")
+
+        # separate different sentences
+        series_sents = list(filter(lambda x: x != "", series_sents))
+        sent = " ".join(series_sents)
+
+        tokens = self.tokenizer(
+            sent,
+            return_tensors="pt",
+            truncation=True,
+            padding="max_length",
+            max_length=self.max_words,
+        )
+        x_len = len([t for t in tokens["input_ids"][0] if t != 0])
+
+        return tokens, x_len
+    
+    def __get__(self, index):
+        raise NotImplementedError
+    
     def __len__(self):
-        return len(self.text_embeds_raw)
+        raise NotImplementedError
     
-    def __getitem__(self, idx):
-        return {'text_embeds_raw':self.text_embeds_raw[idx], 
-                'image_embeds_raw':self.image_embeds_raw[idx]}
-        
 
-# class MultimodalPretrainedEmbeddingsDatasetLoader(object):
-#     def __init__(
-#         self, 
-#         text_embeds_raw_dir: str,
-#         image_embeds_raw_dir: str,
-#         split: str='train',
-#         device='cpu',
-#         num_of_batches=-1, 
-#     ):
-#         self.text_embeds_raw_dir = os.path.join(text_embeds_raw_dir, split)
-#         self.image_embeds_raw_dir = os.path.join(image_embeds_raw_dir, split)
-#         self.device = torch.device(device)
-#         self.num_of_batches = num_of_batches
-            
-#     def load_data(self) -> Dataset:
-#         dataset = None
-#         text_embeds_raw = []
-#         image_embeds_raw = []
-#         text_tensor_names = sorted([f for f in os.listdir(self.text_embeds_raw_dir)],
-#                                    key=lambda x: int(x.split('_')[1].split('.')[0]))
-#         image_tensor_names = sorted([f for f in os.listdir(self.image_embeds_raw_dir)], 
-#                                     key=lambda x: int(x.split('_')[1].split('.')[0]))
-#         if self.num_of_batches > 0:
-#             text_tensor_names = text_tensor_names[:self.num_of_batches]
-#             image_tensor_names = image_tensor_names[:self.num_of_batches]
-#         assert text_tensor_names == image_tensor_names, "text and image tensor names do not match"
+class MultimodalPretrainingDatasetForAdaptor(MultimodalDataset):
+    def __init__(self, 
+                 split='train', 
+                 transform=None, 
+                 data_pct=1.0, 
+                 imsize=256, 
+                 tokenizer=None,
+                 max_words=112):
+        super().__init__(split=split, transform=transform, data_pct=data_pct, 
+                         imsize=imsize, tokenizer=tokenizer, max_words=max_words)
         
-#         total = len(text_tensor_names)
-#         with tqdm(total=total) as pbar:
-#             for i, (text_tensor, image_tensor) in enumerate(zip(text_tensor_names, image_tensor_names)):
-#                 text_tensor = torch.load(os.path.join(self.text_embeds_raw_dir, text_tensor), map_location=self.device)
-#                 image_tensor = torch.load(os.path.join(self.image_embeds_raw_dir, image_tensor),  map_location=self.device)
-#                 if isinstance(image_tensor, dict):  ### For ResNetAE
-#                     image_tensor = image_tensor['z']
-#                 text_embeds_raw.append(text_tensor)
-#                 image_embeds_raw.append(image_tensor)
-#                 if (i + 1) % 200 == 0 or i == total - 1:
-#                     text_embeds_raw = torch.vstack(text_embeds_raw)
-#                     image_embeds_raw = torch.vstack(image_embeds_raw)
-#                     data = {'text_embeds_raw': text_embeds_raw, 'image_embeds_raw': image_embeds_raw}
-#                     ds = Dataset.from_dict(data)
-#                     dataset = ds if dataset is None else concatenate_datasets([dataset, ds])
-#                 pbar.update(1)
-#         return dataset
+        self.df = read_csv(MIMIC_CXR_MASTER_CSV)
+        self.df = self.df[self.df[MIMIC_CXR_VIEW_COL].isin(["PA", "AP"])]
+        self.df[MIMIC_CXR_PATH_COL] = self.df[MIMIC_CXR_PATH_COL].apply(
+            lambda x: os.path.join(MIMIC_CXR_DATA_DIR, "/".join(x.split("/")[1:])))
+
+        # load studies and study to text mapping
+        self.filenames, self.path2sent = self.load_text_data()
+        
+        self.df = self.df[self.df[MIMIC_CXR_SPLIT_COL] == split]
+        if data_pct != 1.0 and split == "train":
+            self.df = self.df.sample(frac=data_pct, random_state=42)
+        self.df.reset_index(drop=True, inplace=True)
+        
+    def __getitem__(self, index):
+        key = self.filenames[index]
+        caps, cap_len = self.get_caption(key)
+        imgs = get_imgs(key, self.imsize, self.transform, multiscale=False)
+        return imgs, caps, cap_len, key
     
+    def __len__(self):
+        return len(self.filenames)
+
     
 class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
     def __init__(
@@ -155,7 +235,7 @@ class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
         
         assert self.text_tensor_names == self.image_tensor_names, "text and image tensor names do not match"
         self.batch_size = torch.load(os.path.join(self.text_embeds_raw_dir, self.text_tensor_names[0]), 
-                                     map_location=self.device)[0].shape[0]
+                                     map_location='cpu')[0].shape[0]
         
     def __getitem__(self, idx):
         batch_idx = idx // self.batch_size
@@ -169,26 +249,145 @@ class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
             image_tensor = image_tensor['z']
         image_tensor = image_tensor[batch_item_idx]
         
-        print('Single sample loaded. ')
+        # print('Single sample loaded. ')
         return {'text_embeds_raw':text_tensor, 'image_embeds_raw':image_tensor}
 
     def __len__(self):
         return self.num_of_batches * self.batch_size
     
     
-class PredefinedBatchSampler(Sampler): 
-    def __init__(self, num_of_batches, batch_size, data_source, random_state=42, *args, **kwargs):
-        import random 
-        
-        super().__init__(data_source=data_source, *args, **kwargs)
+class MultimodalPretrainedEmbeddingsIterableDataset(torch.utils.data.IterableDataset):
+    def __init__(
+        self, 
+        text_embeds_raw_dir: str,
+        image_embeds_raw_dir: str,
+        split: str='train',
+        device='cpu',
+        num_of_batches=-1, 
+        shuffle=True,
+    ):
+        super().__init__()
+        self.text_embeds_raw_dir = os.path.join(text_embeds_raw_dir, split)
+        self.image_embeds_raw_dir = os.path.join(image_embeds_raw_dir, split)
+        self.device = torch.device(device)
         self.num_of_batches = num_of_batches
-        self.batch_size = batch_size
-        self.samples = [list(range(ib, ib+self.batch_size)) for ib 
-                        in range(0, self.num_of_batches*self.batch_size, self.batch_size)]
-        random.seed(random_state)
-        random.shuffle(self.samples)
         
+        self.text_tensor_names = sorted([f for f in os.listdir(self.text_embeds_raw_dir)],
+                                        key=lambda x: int(x.split('_')[1].split('.')[0]))
+        self.image_tensor_names = sorted([f for f in os.listdir(self.image_embeds_raw_dir)], 
+                                         key=lambda x: int(x.split('_')[1].split('.')[0]))
+        assert len(self.text_tensor_names) > 0, f"No tensor files found in the directory {self.text_embeds_raw_dir}"
+        assert len(self.image_tensor_names) > 0, f"No tensor files found in the directory {self.image_embeds_raw_dir}"
+        
+        if self.num_of_batches > 0 and self.num_of_batches < len(self.text_tensor_names):
+            self.text_tensor_names = self.text_tensor_names[:self.num_of_batches]
+            self.image_tensor_names = self.image_tensor_names[:self.num_of_batches]
+        else:
+            self.num_of_batches = len(self.text_tensor_names)
+        
+        if shuffle:
+            self.shuffle_batches()
+        
+        assert self.text_tensor_names == self.image_tensor_names, "text and image tensor names do not match"
+        self.batch_size = torch.load(os.path.join(self.text_embeds_raw_dir, self.text_tensor_names[0]), 
+                                     map_location='cpu')[0].shape[0]
+    
+    def process_single_tensor_file(self, text_tensor, image_tensor):
+        for tt, it in zip(text_tensor, image_tensor):
+            yield {'text_embeds_raw':tt, 'image_embeds_raw':it}
+    
+    def shuffle_batches(self):
+        shuffled_idx = torch.randperm(self.num_of_batches)
+        self.text_tensor_names = [self.text_tensor_names[i] for i in shuffled_idx]
+        self.image_tensor_names = [self.image_tensor_names[i] for i in shuffled_idx]
+    
     def __iter__(self):
-        for batch in self.samples:
-            assert len(batch) == self.batch_size, "batch size does not match"
-            yield batch
+        for text_tensor_name, image_tensor_name in zip(self.text_tensor_names, self.image_tensor_names):
+            text_tensor = torch.load(os.path.join(self.text_embeds_raw_dir, text_tensor_name), 
+                                     map_location=self.device)
+            image_tensor = torch.load(os.path.join(self.image_embeds_raw_dir, image_tensor_name), 
+                                      map_location=self.device)
+            if isinstance(image_tensor, dict):  ### For ResNetAE
+                image_tensor = image_tensor['z']
+            
+            yield from self.process_single_tensor_file(text_tensor, image_tensor)
+    
+    def __len__(self):
+        return self.num_of_batches * self.batch_size
+    
+
+class MultimodalDatasetForClassification(MultimodalDataset):
+    def __init__(
+        self, 
+        split='train', 
+        transform=None, 
+        data_pct=1.0, 
+        img_type='Frontal', 
+        imsize=256, 
+        tokenizer=None,
+        max_words=112, 
+    ):
+        super().__init__(split=split, transform=transform, data_pct=data_pct, img_type=img_type, 
+                         imsize=imsize, tokenizer=tokenizer, max_words=max_words)
+        
+        if not os.path.exists(MIMIC_CXR_DATA_DIR):
+            raise RuntimeError(
+                "MIMIC CXR data directory %s does not exist!" % MIMIC_CXR_DATA_DIR)
+
+        # read in csv file
+        if split == "train":
+            self.df = read_csv(MIMIC_CXR_TRAIN_CSV)
+        elif split == "valid":
+            self.df = read_csv(MIMIC_CXR_VALID_CSV)
+        else:
+            self.df = read_csv(MIMIC_CXR_TEST_CSV)
+
+        # filter image type
+        if img_type != "All":
+            self.df = self.df[self.df[MIMIC_CXR_VIEW_COL].isin(["PA", "AP"])]
+        
+        # get a fraction of dataset
+        if data_pct != 1.0 and split == "train":
+            self.df = self.df.sample(frac=data_pct, random_state=42)
+            
+        # get path
+        self.df[MIMIC_CXR_PATH_COL] = self.df[MIMIC_CXR_PATH_COL].apply(
+            lambda x: os.path.join(
+                MIMIC_CXR_DATA_DIR, "/".join(x.split("/")[1:]))
+        )
+
+        # fill na with 0s
+        self.df = self.df.fillna(0)
+
+        # replace uncertains
+        uncertain_mask = {k: -1 for k in CHEXPERT_COMPETITION_TASKS}
+        self.df = self.df.replace(uncertain_mask, CHEXPERT_UNCERTAIN_MAPPINGS)
+    
+    def __len__(self):
+        return len(self.df)
+    
+    def __getitem(self, index):
+        row = self.df.iloc[index]
+
+        # get image
+        img_path = row["Path"]
+        x = get_imgs(img_path, self.imsize, self.transform)
+
+        # get labels
+        y = list(row[CHEXPERT_COMPETITION_TASKS])
+        y = torch.tensor(y)
+        
+        # Get caption
+        key = self.filenames[index]
+        caps, cap_len = self.get_caption(key)
+
+        # return x, y, img_path
+        return x, caps, cap_len, y, key, img_path
+
+
+def multimodal_collator(*args, **kwargs):
+    d = multimodal_collate_fn(*args, **kwargs)
+    d['input_ids'] = d.pop('caption_ids')
+    d['pixel_values'] = d.pop('imgs')
+    d['return_loss'] = True
+    return d
