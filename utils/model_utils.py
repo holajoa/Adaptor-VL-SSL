@@ -6,6 +6,9 @@ from models.configurations import (
 from transformers import AutoModel
 from typing import Optional 
 
+import timm
+
+import torch.nn as nn
 from torch.nn import Module
 
 
@@ -35,10 +38,4 @@ def load_vision_model(vision_model_type:str,
         if retain_head:
             return AutoModel.from_pretrained(vision_pretrained)
         return AutoModel.from_pretrained(vision_pretrained).base_model
-
-
-def freeze_encoder(model:Adaptor):
-    for encoder in [model.text_model, model.vision_model]:
-        for param in encoder.parameters():
-            param.requires_grad = False
 
