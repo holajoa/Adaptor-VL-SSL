@@ -91,10 +91,10 @@ def main(args):
     ### Training
     seed_everything(args.seed)
     trainer = Trainer(
-        accelerator="gpu", 
-        devices=args.n_gpu, 
-        strategy="ddp" , 
-        # accelerator="cpu",
+        # accelerator="gpu", 
+        # devices=args.n_gpu, 
+        # strategy="ddp" , 
+        accelerator="cpu",
         max_epochs=args.num_train_epochs,
         log_every_n_steps=20, 
         val_check_interval=50, 

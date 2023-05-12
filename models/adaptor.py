@@ -39,11 +39,12 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         else:
             self.config = BertConfig(num_hidden_layers=num_hidden_layers)
         
+        add_vision_cls_token = False
         if add_vision_cls_token:
             self.cls_token = nn.Parameter(torch.zeros((1, self.config.hidden_size)))
             self.embeddings = lambda t, i: torch.cat([t, self.cls_token.repeat(t.size(0), 1, 1).to(t.device), i], dim=1)
         else:
-            self.embeddings = lambda t, i: torch.cat([t, i], dim=1)
+            self.embeddings = lambda t, i: torch.stack([t, i], dim=1)
         self.encoder = BertEncoder(self.config)
         self.pooler = BertPooler(self.config)
 
@@ -84,8 +85,6 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
-        
-        # token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
         
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -165,6 +164,7 @@ class Project(nn.Module):
         
         return image_embeds, text_embeds
 
+
 class Adaptor(pl.LightningModule):
     def __init__(
         self, 
@@ -230,18 +230,19 @@ class Adaptor(pl.LightningModule):
                     output_hidden_states=output_hidden_states,
                     return_dict=return_dict,
                 )
-                image_embeds_raw = vision_outputs.last_hidden_state
+                image_embeds_raw = vision_outputs.pooler_output
             elif self.vision_model_type == 'timm':
-                image_embeds_raw = self.vision_model(pixel_values)
+                image_embeds_raw = self.vision_model(pixel_values)[:, 0, :]
             elif self.vision_model_type == 'ae':
                 vision_outputs = self.vision_model(pixel_values)
-                image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1))
+                image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1)).mean(1)
             else: 
                 logging.ERROR(f'{self.vision_model_type} is not supported.')
         else:
             # logging.info('Using precomputed image_embeds_raw.')
             if self.vision_model_type == 'ae' and len(image_embeds_raw.shape) == 4:
-                image_embeds_raw = torch.flatten(image_embeds_raw, start_dim=2).permute((0, 2, 1))
+                image_embeds_raw = torch.flatten(image_embeds_raw, start_dim=2).permute((0, 2, 1)).mean(1)
+        assert len(image_embeds_raw.shape) == 2
         
         if text_embeds_raw is None:
             assert input_ids is not None, \
@@ -255,16 +256,15 @@ class Adaptor(pl.LightningModule):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-            text_embeds_raw = text_outputs.last_hidden_state
+            text_embeds_raw = text_outputs.pooler_output
         # else:
         #     logging.info('Using precomputed text_embeds_raw.')
         
         image_embeds, text_embeds = self.projection(text_embeds_raw, image_embeds_raw)
         outputs = self.adaptor_module(text_embeds, image_embeds)
         
-        text_seq_len = text_embeds.shape[1]
-        text_embeds = outputs.last_hidden_state[:, :text_seq_len, :]
-        image_embeds = outputs.last_hidden_state[:, text_seq_len:, :]
+        text_embeds = outputs.last_hidden_state[:, 0, :]
+        image_embeds = outputs.last_hidden_state[:, 1, :]
         
         # normalized features
         image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
@@ -272,7 +272,7 @@ class Adaptor(pl.LightningModule):
         
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds[:, 0, :], image_embeds[:, 0, :].t()) * logit_scale   # [batch_size, batch_size]
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale   # [batch_size, batch_size]
         logits_per_image = logits_per_text.T
         
         loss = None
@@ -289,8 +289,6 @@ class Adaptor(pl.LightningModule):
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
             image_embeds=image_embeds,
-            # text_model_output=text_outputs,
-            # vision_model_output=vision_outputs,
         )
     
     def training_step(self, batch, batch_idx):
