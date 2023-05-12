@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 import pytorch_lightning as pl
-from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import TQDMProgressBar
 
 from transformers import BertConfig
@@ -20,8 +20,6 @@ from transformers.models.clip.modeling_clip import clip_loss
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-
-from utils.model_utils import freeze_encoder
 
 import logging
 from tqdm import tqdm
@@ -371,3 +369,10 @@ class StreamingProgressBar(TQDMProgressBar):
             total=self._total,
         )
         return bar
+
+
+def freeze_encoder(model:Adaptor):
+    for encoder in [model.text_model, model.vision_model]:
+        for param in encoder.parameters():
+            param.requires_grad = False
+            
