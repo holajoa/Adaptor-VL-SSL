@@ -1,10 +1,9 @@
 import torch 
 import torch.nn as nn
 
-from transformers import BertModel
+from transformers import BertModel, AutoTokenizer
 
-from models.configurations import (VISION_MODEL_TYPE_2_DATA_TRANSFORM, 
-                                   VISION_MODEL_TYPE_2_VISION_OUTPUT_DIM)
+from models.configurations import VISION_PRETRAINED, TEXT_PRETRAINED
 from utils.utils import get_text_embeds_raw, get_image_embeds_raw
 
 from utils.dataset_utils import get_dataloader
@@ -22,21 +21,21 @@ import argparse
 # SAVED_EMBEDDINGS_DIR = '/vol/bitbucket/jq619/individual-project/saved_embeddings'
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--vision_pretrained', type=str, help='Choose from [101-elastic, swin_base_patch4_window7_224]')
-parser.add_argument('--vision_model_type', type=str, help='Choose from [timm, ae, huggingface]')
-parser.add_argument('--text_pretrained', type=str, 
-                    help='Choose from [bert-base-uncased, dmis-lab/biobert-v1.1, '
-                    'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext, '
-                    'microsoft/BiomedVLP-CXR-BERT-general, '
-                    './weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint]')
-
-parser.add_argument('--text_embeds_raw_dir', type=str, help='path to raw text embeddings')
-parser.add_argument('--image_embeds_raw_dir', type=str, help='path to raw image embeddings')
+parser.add_argument('--vision_model', type=str, help='Choose from [resnet-ae, swin-base]')
+parser.add_argument('--text_model', type=str, 
+                    help='Choose from [bert, biobert, pubmedbert, cxrbert, clinicalbert]')
+    
+parser.add_argument('--text_embeds_raw_dir', type=str, default='/vol/bitbucket/jq619/individual-project/saved_embeddings/text_embeds', 
+                    help='path to raw text embeddings')
+parser.add_argument('--image_embeds_raw_dir', type=str, default='/vol/bitbucket/jq619/individual-project/saved_embeddings/image_embed', 
+                    help='path to raw image embeddings')
 # parser.add_argument('--num_of_batches', type=int, default=100, help='number of batches to use for training')
 
 parser.add_argument('--batch_size', type=int, default=32)
 
 parser.add_argument('--force_rebuild_dataset', action='store_true', help='Whether to force rebuild dataset, if not can load pickled file if available')
+parser.add_argument('--cpu', action='store_true', help='Whether to run on cpu')
+
 parser.add_argument('--num_workers', type=int, default=8)
 parser.add_argument('--data_pct', type=float, default=0.01, help='percentage of data to use. If setting 1.0, then use all data with no shuffling')
 parser.add_argument('--crop_size', type=int, default=224)
@@ -57,25 +56,35 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 logging.info(f'Using device: {device}')
 print(f'Using device: {device}')
 
-do_text = args.text_pretrained is not None
-do_vision = args.vision_pretrained is not None and args.vision_model_type is not None
+do_text = args.text_model is not None
+do_vision = args.vision_model is not None 
+
+if args.vision_model not in VISION_PRETRAINED.keys():
+    raise ValueError(f'Vision model {args.vision_model} not available.'
+                        f'Choose from {list(VISION_PRETRAINED.keys())}')
+    
+if args.text_model not in TEXT_PRETRAINED.keys():
+    raise ValueError(f'Text model {args.text_model} not available.'
+                        f'Choose from {list(TEXT_PRETRAINED.keys())}')
+    
+vision_model_config = VISION_PRETRAINED[args.vision_model]
+args.vision_pretrained = vision_model_config['pretrained_weight']
+args.vision_model_type = vision_model_config['vision_model_type']
+args.vision_output_dim = vision_model_config['vision_output_dim']
+data_transforms = vision_model_config['data_transform']
+
+args.text_pretrained = TEXT_PRETRAINED[args.text_model]
 
 # Load pretrained models
-if args.vision_model_type is None or args.vision_pretrained is None:
-    args.vision_model_type = 'ae'
-    args.vision_pretrained = '101-elastic'
-vision_model = load_vision_model(args.vision_model_type, args.vision_pretrained, retain_head=False)
+vision_model = load_vision_model(args.vision_model_type, args.vision_pretrained)
 vision_model.to(device)
 
-
-if args.text_pretrained is None:
-    args.text_pretrained = "dmis-lab/biobert-v1.1"
+### Load text model
 text_model = BertModel.from_pretrained(args.text_pretrained)
+tokenizer = AutoTokenizer.from_pretrained(args.text_pretrained)
 text_model.to(device)
 
 ### Load dataset
-data_transforms = VISION_MODEL_TYPE_2_DATA_TRANSFORM[args.vision_model_type]
-
 train_dataset_pkl = f'saved_datasets/train_dataset_{args.vision_model_type}.pkl'
 val_dataset_pkl = f'saved_datasets/val_dataset_{args.vision_model_type}.pkl'
 test_dataset_pkl = f'saved_datasets/test_dataset_{args.vision_model_type}.pkl'
@@ -86,6 +95,7 @@ train_dataset = pickle_dataset(
     transform=data_transforms(True, args.crop_size), 
     data_pct=args.data_pct, 
     force_rebuild=args.force_rebuild_dataset, 
+    tokenizer=tokenizer,
 )
 val_dataset = pickle_dataset(
     val_dataset_pkl,
@@ -93,6 +103,7 @@ val_dataset = pickle_dataset(
     transform=data_transforms(False, args.crop_size),
     data_pct=args.data_pct, 
     force_rebuild=args.force_rebuild_dataset, 
+    tokenizer=tokenizer,
 )
 
 test_dataset = pickle_dataset(
@@ -101,6 +112,7 @@ test_dataset = pickle_dataset(
     transform=data_transforms(False, args.crop_size),
     data_pct=args.data_pct, 
     force_rebuild=args.force_rebuild_dataset, 
+    tokenizer=tokenizer,
 )
 
 # Get dataloaders
@@ -135,7 +147,7 @@ for split, dataloader in zip(['train', 'valid', 'test'],
             save_path=args.image_embeds_raw_dir,
             model_name=args.vision_pretrained,
             batch_size=args.batch_size,
-            embedding_dim=VISION_MODEL_TYPE_2_VISION_OUTPUT_DIM[args.vision_model_type],
+            embedding_dim=args.vision_output_dim,
             split=split,
             device=device,
         )
