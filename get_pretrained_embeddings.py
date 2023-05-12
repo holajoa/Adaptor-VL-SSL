@@ -15,6 +15,7 @@ import logging
 from dataset.dataset import multimodal_collator
 import logging
 
+import os
 import argparse
 
 
@@ -27,7 +28,7 @@ parser.add_argument('--text_model', type=str,
     
 parser.add_argument('--text_embeds_raw_dir', type=str, default='/vol/bitbucket/jq619/individual-project/saved_embeddings/text_embeds', 
                     help='path to raw text embeddings')
-parser.add_argument('--image_embeds_raw_dir', type=str, default='/vol/bitbucket/jq619/individual-project/saved_embeddings/image_embed', 
+parser.add_argument('--image_embeds_raw_dir', type=str, default='/vol/bitbucket/jq619/individual-project/saved_embeddings/image_embeds', 
                     help='path to raw image embeddings')
 # parser.add_argument('--num_of_batches', type=int, default=100, help='number of batches to use for training')
 
@@ -135,6 +136,9 @@ test_dataloader = get_dataloader(
     collate_fn=multimodal_collator,
 )
 
+
+os.makedirs(args.image_embeds_raw_dir, exist_ok=True)
+os.makedirs(args.text_embeds_raw_dir, exist_ok=True)
 
 for split, dataloader in zip(['train', 'valid', 'test'], 
                              [train_dataloader, val_dataloader, test_dataloader]):

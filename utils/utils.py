@@ -26,10 +26,6 @@ def get_image_embeds_raw(
         model_name = vision_model_type
     model_name = model_name.replace('/', '_')
     
-    # save_path = os.path.join(save_path, split)
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-    
     if vision_model_type == 'timm' or vision_model_type == 'ae':
         device = next(vision_model.parameters()).device  # timm-loaded model is a nn.Sequential
     else:
@@ -37,7 +33,7 @@ def get_image_embeds_raw(
         
     # Initialise empty npy
     num_batches = len(dataloader)
-    out = torch.empty(num_batches*batch_size, embedding_dim, device=device) 
+    out = np.zeros((num_batches*batch_size, embedding_dim), dtype=np.float32) 
     
     vision_model.eval()
     with torch.no_grad():
@@ -46,7 +42,8 @@ def get_image_embeds_raw(
                 if isinstance(v, torch.Tensor):
                     inputs[k] = v.to(device=device)
             if batch_idx == 0:
-                assert inputs['pixel_values'].size(0) == batch_size, f'Expected batch size {batch_size}, got {inputs.pixel_values.size(0)}'
+                assert inputs['pixel_values'].size(0) == batch_size, \
+                    f'Expected batch size {batch_size}, got {inputs.pixel_values.size(0)}'
 
             if vision_model_type == 'huggingface':
                 vision_outputs = vision_model(
@@ -65,8 +62,9 @@ def get_image_embeds_raw(
                 raise ValueError(f'{vision_model_type} is not supported.')
             assert len(image_embeds_raw.size()) == 2, f'Expected 2D tensor, got {image_embeds_raw.size()}'
             
-            out[batch_idx*batch_size:(batch_idx+1)*batch_size] = image_embeds_raw
-        np.save(os.path.join(save_path, f'{model_name}_{split}.npy'), out.detach().cpu().numpy())
+            out[batch_idx*batch_size:(batch_idx+1)*batch_size] = image_embeds_raw.detach().cpu().numpy()
+            
+        np.save(os.path.join(save_path, f'{model_name}_{split}.npy'), out)
         
 
 def get_text_embeds_raw(
@@ -87,7 +85,7 @@ def get_text_embeds_raw(
     
     # Initialise empty npy
     num_batches = len(dataloader)
-    out = torch.empty(num_batches*batch_size, embedding_dim, device=device) 
+    out = np.zeros((num_batches*batch_size, embedding_dim), dtype=np.float32) 
     
     # device = text_model.device
     text_model.eval()
@@ -102,5 +100,5 @@ def get_text_embeds_raw(
                 output_hidden_states=True,
                 return_dict=True,
             ).pooler_output
-            out[batch_idx*batch_size:(batch_idx+1)*batch_size] = text_embeds_raw
-        np.save(os.path.join(save_path, f'{model_name}_{split}.npy'), out.cpu().numpy())
+            out[batch_idx*batch_size:(batch_idx+1)*batch_size] = text_embeds_raw.detach().cpu().numpy()
+        np.save(os.path.join(save_path, f'{model_name}_{split}.npy'), out)
