@@ -3,7 +3,8 @@ import torch.nn as nn
 
 from transformers import BertModel
 
-from models.configurations import VISION_MODEL_TYPE_2_DATA_TRANSFORM
+from models.configurations import (VISION_MODEL_TYPE_2_DATA_TRANSFORM, 
+                                   VISION_MODEL_TYPE_2_VISION_OUTPUT_DIM)
 from utils.utils import get_text_embeds_raw, get_image_embeds_raw
 
 from utils.dataset_utils import get_dataloader
@@ -125,22 +126,28 @@ test_dataloader = get_dataloader(
 
 for split, dataloader in zip(['train', 'valid', 'test'], 
                              [train_dataloader, val_dataloader, test_dataloader]):
+    if do_vision:
+        logging.info(f'Getting vision embeddings for {split} split')
+        get_image_embeds_raw(
+            dataloader,
+            vision_model=vision_model,
+            vision_model_type=args.vision_model_type,  
+            save_path=args.image_embeds_raw_dir,
+            model_name=args.vision_pretrained,
+            batch_size=args.batch_size,
+            embedding_dim=VISION_MODEL_TYPE_2_VISION_OUTPUT_DIM[args.vision_model_type],
+            split=split,
+            device=device,
+        )
     if do_text:
         logging.info(f'Getting text embeddings for {split} split')
         get_text_embeds_raw(
             dataloader,
             text_model=text_model,
             save_path=args.text_embeds_raw_dir,
+            model_name=args.text_pretrained,
+            batch_size=args.batch_size,
             split=split,
             device=device,
         )
-    if do_vision:
-        logging.info(f'Getting vision embeddings for {split} split')
-        get_image_embeds_raw(
-            dataloader,
-            vision_model=vision_model,
-            vision_model_type='timm', 
-            save_path=args.image_embeds_raw_dir,
-            split=split,
-            device=device,
-        )
+    

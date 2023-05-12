@@ -7,9 +7,11 @@ from mgca.constants import *
 from mgca.datasets.utils import get_imgs
 
 from transformers import BertTokenizer
+from transformers.tokenization_utils import PreTrainedTokenizerBase
+from datasets import Dataset, concatenate_datasets
 
 import torch 
-import torch.nn as nn
+
 import os
 from pathlib import Path
 import pickle
@@ -43,7 +45,7 @@ class MultimodalDataset(torch.utils.data.Dataset):
         
         if isinstance(tokenizer, str):
             self.tokenizer = BertTokenizer.from_pretrained(tokenizer)
-        elif isinstance(tokenizer, nn.Module):
+        elif isinstance(tokenizer, PreTrainedTokenizerBase):
             self.tokenizer = tokenizer
         
     def load_text_data(self):
@@ -274,6 +276,9 @@ class MultimodalPretrainedEmbeddingsIterableDataset(torch.utils.data.IterableDat
                                         key=lambda x: int(x.split('_')[1].split('.')[0]))
         self.image_tensor_names = sorted([f for f in os.listdir(self.image_embeds_raw_dir)], 
                                          key=lambda x: int(x.split('_')[1].split('.')[0]))
+        assert len(self.text_tensor_names) > 0, f"No tensor files found in the directory {self.text_embeds_raw_dir}"
+        assert len(self.image_tensor_names) > 0, f"No tensor files found in the directory {self.image_embeds_raw_dir}"
+        
         if self.num_of_batches > 0 and self.num_of_batches < len(self.text_tensor_names):
             self.text_tensor_names = self.text_tensor_names[:self.num_of_batches]
             self.image_tensor_names = self.image_tensor_names[:self.num_of_batches]

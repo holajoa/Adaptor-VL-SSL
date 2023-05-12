@@ -22,10 +22,11 @@ def get_dataloader(
     num_workers=16,
     collate_fn=None,
     shuffle=False,
+    pin_memory=True,
 ):
     return DataLoader(
         dataset, 
-        pin_memory=True, 
+        pin_memory=pin_memory, 
         drop_last=True,
         shuffle=shuffle,
         batch_size=batch_size,
@@ -94,13 +95,15 @@ def timm_image_processor(imgs:np.ndarray) -> torch.Tensor:
 
 def pickle_dataset(dataset_pkl, split, transform=None, data_pct=1.0, 
                    dataset_class:Dataset=MultimodalPretrainingDatasetForAdaptor, 
-                   force_rebuild=False, **kwargs):
+                   force_rebuild=False, **dataset_kwargs):
+
     if not Path(dataset_pkl).is_file() or force_rebuild:
         ds = dataset_class(
             split=split, 
             transform=transform, 
             data_pct=data_pct, 
-            **kwargs, 
+            **dataset_kwargs, 
+
         )
         with open(dataset_pkl, "wb") as f:
             pickle.dump(ds, f, protocol=2)
@@ -111,7 +114,6 @@ def pickle_dataset(dataset_pkl, split, transform=None, data_pct=1.0,
             ds = pickle.load(f)
     
     return ds
-
 
 def torch2huggingface_dataset(torch_dataset, streaming=True):
     if streaming:
