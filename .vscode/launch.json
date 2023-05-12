@@ -63,7 +63,7 @@
                 "--text_pretrained", 
                 "dmis-lab/biobert-v1.1", 
                 "--batch_size", 
-                "128", 
+                "16", 
                 "--data_pct", 
                 "1.0", 
                 "--num_hidden_layers", 
