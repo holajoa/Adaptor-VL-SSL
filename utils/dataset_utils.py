@@ -96,12 +96,14 @@ def timm_image_processor(imgs:np.ndarray) -> torch.Tensor:
 def pickle_dataset(dataset_pkl, split, transform=None, data_pct=1.0, 
                    dataset_class:Dataset=MultimodalPretrainingDatasetForAdaptor, 
                    force_rebuild=False, **dataset_kwargs):
+
     if not Path(dataset_pkl).is_file() or force_rebuild:
         ds = dataset_class(
             split=split, 
             transform=transform, 
             data_pct=data_pct, 
             **dataset_kwargs, 
+
         )
         with open(dataset_pkl, "wb") as f:
             pickle.dump(ds, f, protocol=2)

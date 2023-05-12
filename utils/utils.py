@@ -47,6 +47,7 @@ def get_image_embeds_raw(
                     inputs[k] = v.to(device=device)
             if batch_idx == 0:
                 assert inputs['pixel_values'].size(0) == batch_size, f'Expected batch size {batch_size}, got {inputs.pixel_values.size(0)}'
+
             if vision_model_type == 'huggingface':
                 vision_outputs = vision_model(
                     inputs.pixel_values,
