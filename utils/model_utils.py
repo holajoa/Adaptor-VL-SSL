@@ -15,7 +15,7 @@ def load_timm_model(model_name='swin_base_patch4_window7_224', retain_head=False
 
 
 def load_vision_model(vision_model_type:str, 
-                      vision_pretrained:Optional[str]=None, 
+                      vision_pretrained:Optional[str]=None,
                       retain_head:bool=False) -> Module:
     if vision_model_type == 'ae':
         import torchxrayvision as xrv
@@ -28,6 +28,13 @@ def load_vision_model(vision_model_type:str,
         if not vision_pretrained:
             vision_pretrained = "swin_base_patch4_window7_224"
         return load_timm_model(vision_pretrained, pretrained=True, retain_head=retain_head)
+    
+    if vision_model_type == 'hub':
+        import torch.hub
+        if not vision_pretrained:
+            vision_pretrained = 'facebookresearch/dinov2/dinov2_vits14'
+        vision_pretrained_repo, vision_pretrained = vision_pretrained.rsplit('/', 1)
+        return torch.hub.load(vision_pretrained_repo, vision_pretrained)
     
     if vision_model_type == 'transformers':
         if retain_head:

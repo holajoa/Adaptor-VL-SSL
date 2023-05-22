@@ -60,13 +60,20 @@ print(f'Using device: {device}')
 do_text = args.text_model is not None
 do_vision = args.vision_model is not None 
 
-if args.vision_model not in VISION_PRETRAINED.keys():
-    raise ValueError(f'Vision model {args.vision_model} not available.'
-                        f'Choose from {list(VISION_PRETRAINED.keys())}')
-    
-if args.text_model not in TEXT_PRETRAINED.keys():
-    raise ValueError(f'Text model {args.text_model} not available.'
-                        f'Choose from {list(TEXT_PRETRAINED.keys())}')
+
+if do_vision: 
+    if args.vision_model not in VISION_PRETRAINED.keys():
+        raise ValueError(f'Vision model {args.vision_model} not available.'
+                            f'Choose from {list(VISION_PRETRAINED.keys())}')
+else:
+    args.vision_model = 'swin-base'
+
+if do_text:
+    if args.text_model not in TEXT_PRETRAINED.keys():
+        raise ValueError(f'Text model {args.text_model} not available.'
+                            f'Choose from {list(TEXT_PRETRAINED.keys())}')
+else:
+    args.text_model = 'biobert'
     
 vision_model_config = VISION_PRETRAINED[args.vision_model]
 args.vision_pretrained = vision_model_config['pretrained_weight']

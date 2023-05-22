@@ -26,7 +26,7 @@ def get_image_embeds_raw(
         model_name = vision_model_type
     model_name = model_name.replace('/', '_')
     
-    if vision_model_type == 'timm' or vision_model_type == 'ae':
+    if vision_model_type in ['timm', 'ae', 'hub']:
         device = next(vision_model.parameters()).device  # timm-loaded model is a nn.Sequential
     else:
         device = vision_model.device
@@ -55,6 +55,8 @@ def get_image_embeds_raw(
                 image_embeds_raw = vision_outputs.pooler_output
             elif vision_model_type == 'timm':
                 image_embeds_raw = vision_model(inputs['pixel_values'])[:, 0, :]
+            elif vision_model_type == 'hub':
+                image_embeds_raw = vision_model(inputs['pixel_values'])
             elif vision_model_type == 'ae':
                 vision_outputs = vision_model(inputs['pixel_values'])
                 image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1)).mean(1)

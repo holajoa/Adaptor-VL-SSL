@@ -22,5 +22,17 @@ VISION_PRETRAINED = {
         'vision_model_type': 'timm',
         'data_transform': DataTransforms,
         'vision_output_dim': 1024,
-    }
+    }, 
+    'dinov2-s':{
+        'pretrained_weight': 'facebookresearch/dinov2/dinov2_vits14',
+        'vision_model_type': 'hub',
+        'data_transform': DataTransforms,
+        'vision_output_dim': 384,
+    }, 
+    'dinov2-b':{
+        'pretrained_weight': 'facebookresearch/dinov2/dinov2_vitb14',
+        'vision_model_type': 'hub',
+        'data_transform': DataTransforms,
+        'vision_output_dim': 768,
+    }, 
 }
