@@ -50,8 +50,10 @@ def main(args):
     )
 
     ### Load dataset
-    train_dataset_pkl = f'saved_datasets/train_dataset_{args.vision_model_type}.pkl'
-    val_dataset_pkl = f'saved_datasets/val_dataset_{args.vision_model_type}.pkl'
+    postfix = '_ae' if args.vision_model == 'ae' else ''
+    train_dataset_pkl = f'saved_datasets/train_dataset_{args.text_model}{postfix}.pkl'
+    val_dataset_pkl = f'saved_datasets/val_dataset_{args.text_model}{postfix}.pkl'
+
 
     train_dataset = pickle_dataset(
         train_dataset_pkl, 
@@ -87,10 +89,10 @@ def main(args):
     ### Training
     seed_everything(args.seed)
     trainer = Trainer(
-        # accelerator="gpu", 
-        # devices=args.n_gpu, 
-        # strategy="ddp" , 
-        accelerator="cpu",
+        accelerator="gpu", 
+        devices=args.n_gpu, 
+        strategy="ddp" , 
+        # accelerator="cpu",
         max_epochs=args.num_train_epochs,
         log_every_n_steps=20, 
         val_check_interval=50, 
@@ -109,7 +111,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--force_rebuild_dataset', action='store_true', help='Whether to force rebuild dataset, if not can load pickled file if available')
     parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--data_pct', type=float, default=0.01, help='percentage of data to use')
+    parser.add_argument('--data_pct', type=float, default=1.0, help='percentage of data to use')
     parser.add_argument('--crop_size', type=int, default=224)
 
     parser.add_argument('--num_hidden_layers', type=int, default=1, help='number of transformer layers to use in adaptor')

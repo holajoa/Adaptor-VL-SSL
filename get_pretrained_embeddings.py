@@ -96,7 +96,6 @@ text_model.to(device)
 postfix = '_ae' if args.vision_model == 'ae' else ''
 train_dataset_pkl = f'saved_datasets/train_dataset_{args.text_model}{postfix}.pkl'
 val_dataset_pkl = f'saved_datasets/val_dataset_{args.text_model}{postfix}.pkl'
-test_dataset_pkl = f'saved_datasets/test_dataset_{args.text_model}{postfix}.pkl'
 
 train_dataset = pickle_dataset(
     train_dataset_pkl, 
@@ -133,7 +132,6 @@ val_dataloader = get_dataloader(
 os.makedirs(args.image_embeds_raw_dir, exist_ok=True)
 os.makedirs(args.text_embeds_raw_dir, exist_ok=True)
 
-
 for split, dataloader in zip(['train', 'valid'], [train_dataloader, val_dataloader]):
     if do_vision:
         logging.info(f'Getting vision embeddings for {split} split')
@@ -142,7 +140,7 @@ for split, dataloader in zip(['train', 'valid'], [train_dataloader, val_dataload
             vision_model=vision_model,
             vision_model_type=args.vision_model_type,  
             save_path=args.image_embeds_raw_dir,
-            model_name=args.vision_pretrained,
+            model_name=args.vision_model,
             batch_size=args.batch_size,
             embedding_dim=args.vision_output_dim,
             split=split,
@@ -154,7 +152,7 @@ for split, dataloader in zip(['train', 'valid'], [train_dataloader, val_dataload
             dataloader,
             text_model=text_model,
             save_path=args.text_embeds_raw_dir,
-            model_name=args.text_pretrained,
+            model_name=args.text_model,
             batch_size=args.batch_size,
             split=split,
             device=device,

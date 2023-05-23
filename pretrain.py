@@ -3,7 +3,7 @@ import torch
 from transformers import BertModel
 from pytorch_lightning import Trainer, seed_everything
 
-from dataset.dataset import MultimodalPretrainedEmbeddingsIterableDataset
+from dataset.dataset import MultimodalPretrainedEmbeddingsDataset
 from models.adaptor import Adaptor, StreamingProgressBar
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
 from utils.model_utils import load_vision_model
@@ -49,20 +49,20 @@ def main(args):
     ### Load dataset
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     dataset_device = 'cpu' if args.num_workers > 0 else device
-    train_dataset = MultimodalPretrainedEmbeddingsIterableDataset(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
-                                                                split='train', num_of_batches=args.num_of_batches, 
-                                                                device=dataset_device)
+    train_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_model, args.image_model, 
+                                                          split='train', num_of_samples=args.num_of_samples, 
+                                                          device=dataset_device)
     args.max_steps = len(train_dataset) // args.batch_size
     print(f'Length of train dataset: {len(train_dataset)}')
     print(f'Number of steps: {args.max_steps}')
 
-    train_dataset = torch2huggingface_dataset(train_dataset, streaming=True)
+    train_dataset = torch2huggingface_dataset(train_dataset, streaming=False)
     train_dataset.with_format('torch')
 
-    val_dataset = MultimodalPretrainedEmbeddingsIterableDataset(args.text_embeds_raw_dir, args.image_embeds_raw_dir, 
-                                                                split='valid', num_of_batches=args.num_of_batches, 
-                                                                device=dataset_device)
-    val_dataset = torch2huggingface_dataset(val_dataset, streaming=True)
+    val_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_model, args.image_model, 
+                                                        split='valid', num_of_samples=args.num_of_samples, 
+                                                        device=dataset_device)
+    val_dataset = torch2huggingface_dataset(val_dataset, streaming=False)
     val_dataset.with_format('torch')
 
     # Get dataloaders
@@ -98,23 +98,15 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--vision_pretrained', type=str, help='Choose from [101-elastic, swin_base_patch4_window7_224]')
-    parser.add_argument('--vision_model_type', type=str, help='Choose from [timm, ae, huggingface]')
-    parser.add_argument('--text_pretrained', type=str, 
-                        help='Choose from [bert-base-uncased, dmis-lab/biobert-v1.1, '
-                        'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext, '
-                        'microsoft/BiomedVLP-CXR-BERT-general, '
-                        './weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint]')
-
-    parser.add_argument('--text_embeds_raw_dir', type=str, help='path to raw text embeddings')
-    parser.add_argument('--image_embeds_raw_dir', type=str, help='path to raw image embeddings')
-    parser.add_argument('--num_of_batches', type=int, default=100, help='number of batches to use for training')
-
+    parser.add_argument('--vision_model', type=str, help='Choose from [resnet-ae, swin-base]')
+    parser.add_argument('--text_model', type=str, 
+                        help='Choose from [bert, biobert, pubmedbert, cxrbert, clinicalbert]')
+    parser.add_argument('--num_of_samples', type=int, default=-1, help='number of samples to use')
     parser.add_argument('--batch_size', type=int, default=32)
 
     parser.add_argument('--force_rebuild_dataset', action='store_true', help='Whether to force rebuild dataset, if not can load pickled file if available')
     parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--data_pct', type=float, default=0.01, help='percentage of data to use')
+    parser.add_argument('--data_pct', type=float, default=1.0, help='percentage of data to use')
     parser.add_argument('--crop_size', type=int, default=224)
 
     parser.add_argument('--num_hidden_layers', type=int, default=1, help='number of transformer layers to use in adaptor')
