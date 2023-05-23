@@ -93,9 +93,10 @@ tokenizer = AutoTokenizer.from_pretrained(args.text_pretrained)
 text_model.to(device)
 
 ### Load dataset
-train_dataset_pkl = f'saved_datasets/train_dataset_{args.vision_model_type}.pkl'
-val_dataset_pkl = f'saved_datasets/val_dataset_{args.vision_model_type}.pkl'
-test_dataset_pkl = f'saved_datasets/test_dataset_{args.vision_model_type}.pkl'
+postfix = '_ae' if args.vision_model == 'ae' else ''
+train_dataset_pkl = f'saved_datasets/train_dataset_{args.text_model}{postfix}.pkl'
+val_dataset_pkl = f'saved_datasets/val_dataset_{args.text_model}{postfix}.pkl'
+test_dataset_pkl = f'saved_datasets/test_dataset_{args.text_model}{postfix}.pkl'
 
 train_dataset = pickle_dataset(
     train_dataset_pkl, 
@@ -108,15 +109,6 @@ train_dataset = pickle_dataset(
 val_dataset = pickle_dataset(
     val_dataset_pkl,
     split='valid',
-    transform=data_transforms(False, args.crop_size),
-    data_pct=args.data_pct, 
-    force_rebuild=args.force_rebuild_dataset, 
-    tokenizer=tokenizer,
-)
-
-test_dataset = pickle_dataset(
-    test_dataset_pkl,
-    split='test',
     transform=data_transforms(False, args.crop_size),
     data_pct=args.data_pct, 
     force_rebuild=args.force_rebuild_dataset, 
@@ -136,19 +128,13 @@ val_dataloader = get_dataloader(
     num_workers=args.num_workers,
     collate_fn=multimodal_collator,
 )
-test_dataloader = get_dataloader(
-    test_dataset, 
-    batch_size=args.batch_size,
-    num_workers=args.num_workers,
-    collate_fn=multimodal_collator,
-)
 
 
 os.makedirs(args.image_embeds_raw_dir, exist_ok=True)
 os.makedirs(args.text_embeds_raw_dir, exist_ok=True)
 
-for split, dataloader in zip(['train', 'valid', 'test'], 
-                             [train_dataloader, val_dataloader, test_dataloader]):
+
+for split, dataloader in zip(['train', 'valid'], [train_dataloader, val_dataloader]):
     if do_vision:
         logging.info(f'Getting vision embeddings for {split} split')
         get_image_embeds_raw(

@@ -7,7 +7,7 @@ TEXT_PRETRAINED = {
     'biobert': 'dmis-lab/biobert-v1.1',
     'pubmedbert': 'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext',
     'cxrbert': 'microsoft/BiomedVLP-CXR-BERT-general',
-    'clinicalbert': './weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint',
+    'clinicalbert': 'weights/ClinicalBERT_checkpoint/ClinicalBERT_pretraining_pytorch_checkpoint',
 }
 
 VISION_PRETRAINED = {

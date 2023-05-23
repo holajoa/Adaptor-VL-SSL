@@ -65,21 +65,22 @@ class MultimodalDataset(torch.utils.data.Dataset):
         # filter studies to use for current split
         filenames = []
         total = len(self.df)
+        removed_indices = []
         with tqdm(total=total) as pbar:
             for row in self.df.itertuples():
                 cur_split = getattr(row, MIMIC_CXR_SPLIT_COL)
                 path = getattr(row, MIMIC_CXR_PATH_COL)
                 
-                ### Addition: make sure path points to an existing file ==========
-                if not Path(path).is_file():
-                    continue
-                ### End addition =================================================
-                
                 if cur_split == self.split and path in path2sent:
+                    ### Addition: make sure path points to an existing file ==========
+                    if not Path(path).is_file():
+                        removed_indices.append(row.Index)
+                        continue
+                    ### End addition =================================================
                     filenames.append(path)
                 
                 pbar.update(1)
-        return filenames, path2sent
+        return filenames, path2sent, removed_indices
     
     def create_path_2_sent_mapping(self):
         sent_lens, num_sents = [], []
@@ -192,12 +193,14 @@ class MultimodalPretrainingDatasetForAdaptor(MultimodalDataset):
             lambda x: os.path.join(MIMIC_CXR_DATA_DIR, "/".join(x.split("/")[1:])))
 
         # load studies and study to text mapping
-        self.filenames, self.path2sent = self.load_text_data()
+        self.filenames, self.path2sent, removed_indices = self.load_text_data()
+        self.df.drop(removed_indices, axis=0, inplace=True)  # remove rows where image file path does not exist
         
         self.df = self.df[self.df[MIMIC_CXR_SPLIT_COL] == split]
         if data_pct != 1.0 and split == "train":
             self.df = self.df.sample(frac=data_pct, random_state=42)
         self.df.reset_index(drop=True, inplace=True)
+        self.df.dicom_id.to_csv(f'{MIMIC_CXR_DATA_DIR}/mimic-cxr-2.0.0_idx2dicom_id_{split}.csv')
         
     def __getitem__(self, index):
         key = self.filenames[index]
