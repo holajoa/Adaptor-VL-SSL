@@ -20,8 +20,6 @@ def get_image_embeds_raw(
     split='train', 
     device='cuda',
 ):  
-    # if model_name:
-    #     save_path = os.path.join(save_path, model_name)
     if not model_name:
         model_name = vision_model_type
     model_name = model_name.replace('/', '_')
@@ -33,7 +31,7 @@ def get_image_embeds_raw(
         
     # Initialise empty npy
     num_batches = len(dataloader)
-    out = np.zeros((num_batches*batch_size, embedding_dim), dtype=np.float32) 
+    out = np.zeros((len(dataloader.dataset), embedding_dim), dtype=np.float32) 
     
     vision_model.eval()
     with torch.no_grad():
@@ -64,6 +62,9 @@ def get_image_embeds_raw(
                 raise ValueError(f'{vision_model_type} is not supported.')
             assert len(image_embeds_raw.size()) == 2, f'Expected 2D tensor, got {image_embeds_raw.size()}'
             
+            if batch_idx == num_batches - 1:
+                out[batch_idx*batch_size:] = image_embeds_raw.detach().cpu().numpy()
+                break
             out[batch_idx*batch_size:(batch_idx+1)*batch_size] = image_embeds_raw.detach().cpu().numpy()
             
         np.save(os.path.join(save_path, f'{model_name}_{split}.npy'), out)
@@ -87,7 +88,7 @@ def get_text_embeds_raw(
     
     # Initialise empty npy
     num_batches = len(dataloader)
-    out = np.zeros((num_batches*batch_size, embedding_dim), dtype=np.float32) 
+    out = np.zeros((len(dataloader.dataset), embedding_dim), dtype=np.float32) 
     
     # device = text_model.device
     text_model.eval()
@@ -102,5 +103,8 @@ def get_text_embeds_raw(
                 output_hidden_states=True,
                 return_dict=True,
             ).pooler_output
+            if batch_idx == num_batches - 1:
+                out[batch_idx*batch_size:] = text_embeds_raw.detach().cpu().numpy()
+                break
             out[batch_idx*batch_size:(batch_idx+1)*batch_size] = text_embeds_raw.detach().cpu().numpy()
         np.save(os.path.join(save_path, f'{model_name}_{split}.npy'), out)
