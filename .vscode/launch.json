@@ -80,9 +80,7 @@
             "python":"/vol/bitbucket/jq619/idv/bin/python", 
             "args":[
                 "--vision_model",
-                "resnet-ae", 
-                "--text_model", 
-                "bert", 
+                "swin-base", 
                 "--batch_size", 
                 "16", 
                 "--data_pct", 

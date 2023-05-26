@@ -93,7 +93,7 @@ tokenizer = AutoTokenizer.from_pretrained(args.text_pretrained)
 text_model.to(device)
 
 ### Load dataset
-postfix = '_ae' if args.vision_model == 'ae' else ''
+postfix = '_ae' if args.vision_model_type == 'ae' else ''
 train_dataset_pkl = f'saved_datasets/train_dataset_{args.text_model}{postfix}.pkl'
 val_dataset_pkl = f'saved_datasets/val_dataset_{args.text_model}{postfix}.pkl'
 
