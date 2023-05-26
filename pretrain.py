@@ -41,7 +41,7 @@ def main(args):
     dataset_device = 'cpu' if args.num_workers > 0 else device
     train_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_model, args.vision_model, 
                                                           split='train', num_of_samples=args.num_of_samples, 
-                                                          device=dataset_device)
+                                                          device=dataset_device, shuffle=True, seed=args.seed)
     args.max_steps = len(train_dataset) // args.batch_size
     print(f'Length of train dataset: {len(train_dataset)}')
     print(f'Number of steps: {args.max_steps}')

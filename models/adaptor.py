@@ -38,14 +38,14 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         else:
             self.config = BertConfig(num_hidden_layers=num_hidden_layers)
         
-        self.embeddings = lambda t, i: torch.stack([t, i], dim=1)
+        self.embeddings = lambda i, t: torch.stack([i, t], dim=1)
         self.encoder = BertEncoder(self.config)
         self.pooler = BertPooler(self.config)
 
     def forward(
         self, 
-        text_embeds:torch.Tensor, 
         image_embeds:torch.Tensor, 
+        text_embeds:Optional[torch.Tensor]=None, 
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -58,8 +58,13 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         **kwargs, 
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         
-        assert text_embeds.device == image_embeds.device, "text and image embeddings must be on the same device"
-        inputs_embeds = self.embeddings(text_embeds, image_embeds)
+        
+        # Optional text embedding inputs
+        if text_embeds is not None:
+            assert text_embeds.device == image_embeds.device, "text and image embeddings must be on the same device"
+            inputs_embeds = self.embeddings(image_embeds, text_embeds)
+        else:
+            inputs_embeds = image_embeds
         
         # Copied from transformers/models/bert/modeling_bert.py, BertModel.forward()
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -133,7 +138,7 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
 class Project(nn.Module):
     def __init__(
         self, 
-        text_embed_dim:int,
+        text_embed_dim:int,  
         vision_embed_dim:int,
         projection_dim:int=512,
     ):
@@ -146,17 +151,19 @@ class Project(nn.Module):
 
     def forward(
         self,
-        text_embeds_:torch.Tensor,
         image_embeds_:torch.Tensor,
-    ):
-        text_embeds = self.text_projection(text_embeds_)
+        text_embeds_:Optional[torch.Tensor]=None,
+    ):  
+        
         image_embeds = self.visual_projection(image_embeds_)
+        image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)  # normalized features
         
-        # normalized features
-        text_embeds = text_embeds / text_embeds.norm(dim=-1, keepdim=True)
-        image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
+        if text_embeds_ is not None:
+            text_embeds = self.text_projection(text_embeds_)
+            text_embeds = text_embeds / text_embeds.norm(dim=-1, keepdim=True)  # normalized features
+            return image_embeds, text_embeds
         
-        return image_embeds, text_embeds
+        return image_embeds
 
 
 class Adaptor(pl.LightningModule):
@@ -190,45 +197,56 @@ class Adaptor(pl.LightningModule):
         
     def forward(
         self,
-        image_embeds_raw: Optional[torch.FloatTensor] = None, 
-        text_embeds_raw: Optional[torch.FloatTensor] = None, 
-        return_loss: Optional[bool] = True,
-        return_dict: Optional[bool] = True,
+        image_embeds_raw:torch.FloatTensor, 
+        text_embeds_raw:Optional[torch.FloatTensor]=None, 
+        return_loss:Optional[bool]=True,
+        return_dict:Optional[bool]=True,
         **kwargs, 
     ) -> Union[Tuple[torch.Tensor], CLIPOutput]:
+        
         assert len(image_embeds_raw.shape) == 2
-        assert len(text_embeds_raw.shape) == 2
         
-        image_embeds, text_embeds = self.projection(text_embeds_raw, image_embeds_raw)
-        outputs = self.adaptor_module(text_embeds, image_embeds)
+        if text_embeds_raw is not None:
+            assert len(text_embeds_raw.shape) == 2
         
-        text_embeds = outputs.last_hidden_state[:, 0, :]
-        image_embeds = outputs.last_hidden_state[:, 1, :]
+            image_embeds, text_embeds = self.projection(image_embeds_raw, text_embeds_raw)
+            outputs = self.adaptor_module(image_embeds, text_embeds)
+            
+            image_embeds = outputs.last_hidden_state[:, 0, :]
+            text_embeds = outputs.last_hidden_state[:, 1, :]
+            
+            # normalized features
+            image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
+            text_embeds = text_embeds / text_embeds.norm(dim=-1, keepdim=True)
+            
+            # cosine similarity as logits
+            logit_scale = self.logit_scale.exp()
+            logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale   # [batch_size, batch_size]
+            logits_per_image = logits_per_text.T
+            
+            loss = None
+            if return_loss:
+                loss = clip_loss(logits_per_text)
+            
+            if not return_dict:
+                output = (logits_per_image, logits_per_text, text_embeds, image_embeds)
+                return ((loss,) + output) if loss is not None else output
+            
+            return CLIPOutput(
+                loss=loss,
+                logits_per_image=logits_per_image,
+                logits_per_text=logits_per_text,
+                text_embeds=text_embeds,
+                image_embeds=image_embeds,
+            )
         
-        # normalized features
-        image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
-        text_embeds = text_embeds / text_embeds.norm(dim=-1, keepdim=True)
-        
-        # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale   # [batch_size, batch_size]
-        logits_per_image = logits_per_text.T
-        
-        loss = None
-        if return_loss:
-            loss = clip_loss(logits_per_text)
-        
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds)
-            return ((loss,) + output) if loss is not None else output
-        
-        return CLIPOutput(
-            loss=loss,
-            logits_per_image=logits_per_image,
-            logits_per_text=logits_per_text,
-            text_embeds=text_embeds,
-            image_embeds=image_embeds,
-        )
+        else:   # text_embeds is none
+            image_embeds = self.projection(image_embeds_raw)
+            outputs = self.adaptor_module(image_embeds)
+            image_embeds = outputs.last_hidden_state[:, 0, :]
+            image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
+            
+            return image_embeds  # ignore return_dict and return_loss
     
     def training_step(self, batch, batch_idx):
         outputs = self(**batch)
