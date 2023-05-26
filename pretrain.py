@@ -1,6 +1,5 @@
 import torch
 
-from transformers import BertModel
 from pytorch_lightning import Trainer, seed_everything
 
 from dataset.dataset import MultimodalPretrainedEmbeddingsDataset
@@ -9,6 +8,7 @@ from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
 from utils.model_utils import load_vision_model
 from utils.dataset_utils import torch2huggingface_dataset, get_dataloader
 
+from math import ceil
 import argparse 
 import logging
 
@@ -42,9 +42,9 @@ def main(args):
     train_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_model, args.vision_model, 
                                                           split='train', num_of_samples=args.num_of_samples, 
                                                           device=dataset_device, shuffle=True, seed=args.seed)
-    args.max_steps = len(train_dataset) // args.batch_size
-    print(f'Length of train dataset: {len(train_dataset)}')
-    print(f'Number of steps: {args.max_steps}')
+    args.max_steps = ceil(len(train_dataset) / args.batch_size) * args.num_train_epochs
+    print(f'Number of training samples used: {len(train_dataset)}')
+    print(f'Total number of training steps: {args.max_steps}')
 
     train_dataset = torch2huggingface_dataset(train_dataset, streaming=False)
     train_dataset.with_format('torch')
@@ -72,16 +72,17 @@ def main(args):
     ### Training
     seed_everything(args.seed)
     trainer = Trainer(
-        # accelerator="gpu", 
-        # devices=args.n_gpu, 
-        # strategy="ddp" , 
-        accelerator="cpu",
+        accelerator="gpu", 
+        devices=args.n_gpu, 
+        strategy="ddp" , 
+        # accelerator="cpu",
         max_epochs=args.num_train_epochs,
-        max_steps=args.max_steps,
-        log_every_n_steps=20, 
-        val_check_interval=50, 
+        # max_steps=args.max_steps,
+        log_every_n_steps=100, 
+        check_val_every_n_epoch=1, 
         default_root_dir=args.output_dir,
-        callbacks=[StreamingProgressBar(total=args.max_steps)],
+        callbacks=[StreamingProgressBar(total=args.max_steps//args.num_train_epochs)],
+        enable_progress_bar=False, 
     )
     trainer.fit(model, train_dataloader, val_dataloader)
 

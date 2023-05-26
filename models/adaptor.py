@@ -251,14 +251,14 @@ class Adaptor(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         outputs = self(**batch)
         loss = outputs.loss
-        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log('train_loss', loss, prog_bar=True, logger=True)
         self.lr_schedulers().step()
         return loss
     
     def _shared_eval(self, batch, batch_idx, prefix):
         outputs = self(**batch)
         loss = outputs.loss
-        self.log(f'{prefix}_loss', loss)
+        self.log(f'{prefix}_loss', loss, prog_bar=True, logger=True)
         
     def validation_step(self, batch, batch_idx):
         self._shared_eval(batch, batch_idx, "val")
@@ -271,6 +271,11 @@ class Adaptor(pl.LightningModule):
         lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=2, eta_min=self.lr/10)
         return {'optimizer':optimizer, 'lr_scheduler':lr_schedule}
 
+    def get_progress_bar_dict(self):
+        # don't show the version number
+        items = super().get_progress_bar_dict()
+        items.pop("v_num", None)
+        return items
 
 # class AdaptorPipeline(pl.LightningModule):
 #     def __init__(
