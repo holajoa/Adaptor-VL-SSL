@@ -220,7 +220,6 @@ class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
         split: str='train',
         device='cpu',
         num_of_samples=-1, 
-        shuffle=True,
     ):
         super().__init__()
         self.text_embeds_raw_dir = f'saved_embeddings/text_embeds/{text_model_name}_{split}.npy'
@@ -230,15 +229,13 @@ class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
         self.text_embeds = np.load(self.text_embeds_raw_dir, mmap_mode='r')
         
         self.device = torch.device(device)
-        self.num_of_samples = num_of_samples
-        self.indices = np.arange(self.num_of_samples)
-        if shuffle and split == 'train':
-            self.shuffle()
         if num_of_samples > 0:
             self.indices = self.indices[:num_of_samples]
-    
-    def shuffle(self):
-        self.indices = torch.randperm(self.num_of_samples)
+        else:  ## num_of_samples == -1
+            num_of_samples = len(self.image_embeds)
+        self.num_of_samples = num_of_samples
+        self.indices = np.arange(self.num_of_samples)
+
         
     def __getitem__(self, idx):
         text_tensor = self.text_embeds[idx]

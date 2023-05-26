@@ -26,20 +26,10 @@ def main(args):
     args.vision_pretrained = vision_model_config['pretrained_weight']
     args.vision_model_type = vision_model_config['vision_model_type']
     args.vision_output_dim = vision_model_config['vision_output_dim']
-    
     args.text_pretrained = TEXT_PRETRAINED[args.text_model]
     
-    ### Load vision model (not used in training actually, just for model definition)
-    vision_model = load_vision_model(args.vision_model_type, args.vision_pretrained)
-
-    ### Load text model (not used in training actually, just for model definition)
-    text_model = BertModel.from_pretrained(args.text_pretrained)
-
     ### Define model
     model = Adaptor(
-        text_model=text_model,
-        vision_model=vision_model,
-        vision_model_type=args.vision_model_type, 
         vision_output_dim=args.vision_output_dim,
         projection_dim=args.projection_dim,
         num_hidden_layers=args.num_hidden_layers, 
@@ -49,7 +39,7 @@ def main(args):
     ### Load dataset
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     dataset_device = 'cpu' if args.num_workers > 0 else device
-    train_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_model, args.image_model, 
+    train_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_model, args.vision_model, 
                                                           split='train', num_of_samples=args.num_of_samples, 
                                                           device=dataset_device)
     args.max_steps = len(train_dataset) // args.batch_size
@@ -59,7 +49,7 @@ def main(args):
     train_dataset = torch2huggingface_dataset(train_dataset, streaming=False)
     train_dataset.with_format('torch')
 
-    val_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_model, args.image_model, 
+    val_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_model, args.vision_model, 
                                                         split='valid', num_of_samples=args.num_of_samples, 
                                                         device=dataset_device)
     val_dataset = torch2huggingface_dataset(val_dataset, streaming=False)
@@ -82,10 +72,10 @@ def main(args):
     ### Training
     seed_everything(args.seed)
     trainer = Trainer(
-        accelerator="gpu", 
-        devices=args.n_gpu, 
-        strategy="ddp" , 
-        # accelerator="cpu",
+        # accelerator="gpu", 
+        # devices=args.n_gpu, 
+        # strategy="ddp" , 
+        accelerator="cpu",
         max_epochs=args.num_train_epochs,
         max_steps=args.max_steps,
         log_every_n_steps=20, 
@@ -127,7 +117,7 @@ if __name__ == '__main__':
     from time import gmtime, strftime
 
     log_fn = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
-    logging.basicConfig(filename=f'logs/train_from_embeds{log_fn}.log', encoding='utf-8', level=logging.INFO)
+    logging.basicConfig(filename=f'logs/train_from_embeds_{log_fn}.log', encoding='utf-8', level=logging.INFO)
 
     num_of_gpus = torch.cuda.device_count()
     logging.info(f"Number of available GPUs = {num_of_gpus}: "

@@ -133,6 +133,17 @@ os.makedirs(args.image_embeds_raw_dir, exist_ok=True)
 os.makedirs(args.text_embeds_raw_dir, exist_ok=True)
 
 for split, dataloader in zip(['train', 'valid'], [train_dataloader, val_dataloader]):
+    if do_text:
+        logging.info(f'Getting text embeddings for {split} split')
+        get_text_embeds_raw(
+            dataloader,
+            text_model=text_model,
+            save_path=args.text_embeds_raw_dir,
+            model_name=args.text_model,
+            batch_size=args.batch_size,
+            split=split,
+            device=device,
+        )
     if do_vision:
         logging.info(f'Getting vision embeddings for {split} split')
         get_image_embeds_raw(
@@ -146,15 +157,5 @@ for split, dataloader in zip(['train', 'valid'], [train_dataloader, val_dataload
             split=split,
             device=device,
         )
-    if do_text:
-        logging.info(f'Getting text embeddings for {split} split')
-        get_text_embeds_raw(
-            dataloader,
-            text_model=text_model,
-            save_path=args.text_embeds_raw_dir,
-            model_name=args.text_model,
-            batch_size=args.batch_size,
-            split=split,
-            device=device,
-        )
+    
     

@@ -4,7 +4,7 @@ from transformers import AutoTokenizer
 from transformers import BertModel
 from pytorch_lightning import Trainer, seed_everything
 
-from models.adaptor import Adaptor
+from models.adaptor import AdaptorPipeline
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
 from utils.dataset_utils import pickle_dataset, get_dataloader
 from utils.model_utils import load_vision_model
@@ -39,7 +39,7 @@ def main(args):
     tokenizer = AutoTokenizer.from_pretrained(args.text_pretrained)
 
     ### Define model
-    model = Adaptor(
+    model = AdaptorPipeline(
         text_model=text_model,
         vision_model=vision_model,
         vision_model_type=args.vision_model_type, 
