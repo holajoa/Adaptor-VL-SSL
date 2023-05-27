@@ -12,7 +12,10 @@ from pathlib import Path
 from dataset.dataset import MultimodalPretrainingDatasetForAdaptor
 from mgca.datasets.transforms import DataTransforms
 
+from datasets import Dataset
+
 import pickle
+
 
 def get_dataloader(
     dataset, 
@@ -20,16 +23,19 @@ def get_dataloader(
     num_workers=16,
     collate_fn=None,
     shuffle=False,
+    pin_memory=True,
+    drop_last=False, 
 ):
     return DataLoader(
         dataset, 
-        pin_memory=True, 
-        drop_last=True,
+        pin_memory=pin_memory, 
         shuffle=shuffle,
         batch_size=batch_size,
         collate_fn=collate_fn,
         num_workers=num_workers, 
+        drop_last=drop_last,
     )
+    
 
 class AutoEncoderDataTransforms(object):
     def __init__(self, is_train:bool=True, crop_size:int=224):
@@ -38,6 +44,7 @@ class AutoEncoderDataTransforms(object):
             BatchedXRayCenterCrop(),
             xrv.datasets.XRayResizer(self.crop_size), 
         ])
+        
     def __call__(self, image):
         image = xrv.datasets.normalize(np.array(image).astype(float), 255) 
 
@@ -52,6 +59,7 @@ class AutoEncoderDataTransforms(object):
         image = self.data_transforms(image)
         image = torch.from_numpy(image)
         return image
+    
     
 class BatchedXRayCenterCrop(object):
     def crop_center(self, img):
@@ -90,14 +98,18 @@ def ae_image_processor(imgs:np.ndarray, return_dict=True) \
 def timm_image_processor(imgs:np.ndarray) -> torch.Tensor:
     return ViTImageProcessor()(imgs, return_tensors="pt", return_dict=True)
 
+
 def pickle_dataset(dataset_pkl, split, transform=None, data_pct=1.0, 
                    dataset_class:Dataset=MultimodalPretrainingDatasetForAdaptor, 
-                   force_rebuild=False):
+                   force_rebuild=False, **dataset_kwargs):
+
     if not Path(dataset_pkl).is_file() or force_rebuild:
         ds = dataset_class(
             split=split, 
             transform=transform, 
             data_pct=data_pct, 
+            **dataset_kwargs, 
+
         )
         with open(dataset_pkl, "wb") as f:
             pickle.dump(ds, f, protocol=2)
@@ -106,6 +118,20 @@ def pickle_dataset(dataset_pkl, split, transform=None, data_pct=1.0,
         print(f'Loading dataset from: {dataset_pkl}')
         with open(dataset_pkl, "rb") as f:
             ds = pickle.load(f)
-    
     return ds
-     
+
+
+def torch2huggingface_dataset(torch_dataset, streaming=True):
+    if streaming:
+        def gen():
+            for ex in torch_dataset:
+                yield ex
+        return Dataset.from_generator(gen, streaming=True)
+        
+    else:
+        def gen():
+            for idx in range(len(torch_dataset)):
+                yield torch_dataset[idx]
+        return Dataset.from_generator(gen, streaming=True)
+    
+    
