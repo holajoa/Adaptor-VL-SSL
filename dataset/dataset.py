@@ -1,5 +1,4 @@
 from mgca.datasets.pretrain_dataset import (
-    MultimodalPretrainingDataset, 
     multimodal_collate_fn, 
     BASE_DIR, 
 )
@@ -8,7 +7,6 @@ from mgca.datasets.utils import get_imgs
 
 from transformers import BertTokenizer
 from transformers.tokenization_utils import PreTrainedTokenizerBase
-from datasets import Dataset, concatenate_datasets
 
 import torch 
 
@@ -248,122 +246,6 @@ class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.indices)
-    
-    
-# class MultimodalPretrainedEmbeddingsIterableDataset(torch.utils.data.IterableDataset):
-#     def __init__(
-#         self, 
-#         text_embeds_raw_dir: str,
-#         image_embeds_raw_dir: str,
-#         split: str='train',
-#         device='cpu',
-#         num_of_samples=-1, 
-#         shuffle=True,
-#     ):
-#         super().__init__()
-#         self.text_embeds_raw_dir = os.path.join(text_embeds_raw_dir, split)
-#         self.image_embeds_raw_dir = os.path.join(image_embeds_raw_dir, split)
-#         self.device = torch.device(device)
-#         self.num_of_samples = num_of_samples
-#         self.indices = np.arange(self.num_of_samples)
-        
-#         if shuffle and split == 'train':
-#             self.shuffle()
-        
-#         assert self.text_tensor_names == self.image_tensor_names, "text and image tensor names do not match"
-#         self.batch_size = torch.load(os.path.join(self.text_embeds_raw_dir, self.text_tensor_names[0]), 
-#                                      map_location='cpu')[0].shape[0]
-    
-#     def process_single_tensor_file(self, text_tensor, image_tensor):
-#         for tt, it in zip(text_tensor, image_tensor):
-#             yield {'text_embeds_raw':tt, 'image_embeds_raw':it}
-    
-#     def shuffle(self):
-#         self.indices = torch.randperm(self.num_of_samples)
-        
-    
-#     def __iter__(self):
-#         for text_tensor_name, image_tensor_name in zip(self.text_tensor_names, self.image_tensor_names):
-#             text_tensor = torch.load(os.path.join(self.text_embeds_raw_dir, text_tensor_name), 
-#                                      map_location=self.device)
-#             image_tensor = torch.load(os.path.join(self.image_embeds_raw_dir, image_tensor_name), 
-#                                       map_location=self.device)
-#             if isinstance(image_tensor, dict):  ### For ResNetAE
-#                 image_tensor = image_tensor['z']
-            
-#             yield from self.process_single_tensor_file(text_tensor, image_tensor)
-    
-#     def __len__(self):
-#         return self.num_of_batches * self.batch_size
-    
-
-# class MultimodalDatasetForClassification(MultimodalDataset):
-#     def __init__(
-#         self, 
-#         split='train', 
-#         transform=None, 
-#         data_pct=1.0, 
-#         img_type='Frontal', 
-#         imsize=256, 
-#         tokenizer=None,
-#         max_words=112, 
-#     ):
-#         super().__init__(split=split, transform=transform, data_pct=data_pct, img_type=img_type, 
-#                          imsize=imsize, tokenizer=tokenizer, max_words=max_words)
-        
-#         if not os.path.exists(MIMIC_CXR_DATA_DIR):
-#             raise RuntimeError(
-#                 "MIMIC CXR data directory %s does not exist!" % MIMIC_CXR_DATA_DIR)
-
-#         # read in csv file
-#         if split == "train":
-#             self.df = read_csv(MIMIC_CXR_TRAIN_CSV)
-#         elif split == "valid":
-#             self.df = read_csv(MIMIC_CXR_VALID_CSV)
-#         else:
-#             self.df = read_csv(MIMIC_CXR_TEST_CSV)
-
-#         # filter image type
-#         if img_type != "All":
-#             self.df = self.df[self.df[MIMIC_CXR_VIEW_COL].isin(["PA", "AP"])]
-        
-#         # get a fraction of dataset
-#         if data_pct != 1.0 and split == "train":
-#             self.df = self.df.sample(frac=data_pct, random_state=42)
-            
-#         # get path
-#         self.df[MIMIC_CXR_PATH_COL] = self.df[MIMIC_CXR_PATH_COL].apply(
-#             lambda x: os.path.join(
-#                 MIMIC_CXR_DATA_DIR, "/".join(x.split("/")[1:]))
-#         )
-
-#         # fill na with 0s
-#         self.df = self.df.fillna(0)
-
-#         # replace uncertains
-#         uncertain_mask = {k: -1 for k in CHEXPERT_COMPETITION_TASKS}
-#         self.df = self.df.replace(uncertain_mask, CHEXPERT_UNCERTAIN_MAPPINGS)
-    
-#     def __len__(self):
-#         return len(self.df)
-    
-#     def __getitem__(self, index):
-#         row = self.df.iloc[index]
-
-#         # get image
-#         img_path = row["Path"]
-#         x = get_imgs(img_path, self.imsize, self.transform)
-
-#         # get labels
-#         y = list(row[CHEXPERT_COMPETITION_TASKS])
-#         y = torch.tensor(y)
-        
-#         # Get caption
-#         key = self.filenames[index]
-#         caps, cap_len = self.get_caption(key)
-
-#         # return x, y, img_path
-#         return x, caps, cap_len, y, key, img_path
 
 
 def multimodal_collator(*args, **kwargs):
@@ -372,3 +254,14 @@ def multimodal_collator(*args, **kwargs):
     d['pixel_values'] = d.pop('imgs')
     d['return_loss'] = True
     return d
+
+def clf_collator(batch):
+    pixel_values = []
+    labels = []
+    for sample in batch:
+        pixel_values.append(sample[0])
+        labels.append(sample[1])
+    return {
+        'pixel_values':torch.stack(pixel_values, dim=0), 
+        'labels':torch.vstack(labels), 
+    }

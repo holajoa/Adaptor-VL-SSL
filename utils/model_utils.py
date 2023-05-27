@@ -5,6 +5,11 @@ import timm
 
 import torch.nn as nn
 from torch.nn import Module
+from pytorch_lightning.callbacks import TQDMProgressBar
+
+from tqdm import tqdm
+import sys
+import os
 
 
 def load_timm_model(model_name='swin_base_patch4_window7_224', retain_head=False, pretrained=True):
@@ -41,3 +46,42 @@ def load_vision_model(vision_model_type:str,
             return AutoModel.from_pretrained(vision_pretrained)
         return AutoModel.from_pretrained(vision_pretrained).base_model
 
+def get_newest_ckpt(vision_model, text_model):
+    base_dir = f'/vol/bitbucket/jq619/individual-project/trained_models/pretrain/{vision_model}_{text_model}/default/'
+    base_dir = os.path.join([os.path.abspath(os.path.join(base_dir, p)) for p in os.listdir(base_dir)][-1], 'checkpoints')
+    ckpt = [os.path.abspath(os.path.join(base_dir, p)) for p in os.listdir(base_dir)][-1]
+    return ckpt
+
+class StreamingProgressBar(TQDMProgressBar):
+    def __init__(self, total:int, val_total:Optional[int]=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._total = total
+        self._val_total = val_total
+         
+    def init_train_tqdm(self):
+        bar = tqdm(
+            desc='Training',
+            initial=self.train_batch_idx,
+            position=(2 * self.process_position),
+            disable=self.is_disabled,
+            leave=True,
+            dynamic_ncols=True,
+            file=sys.stdout,
+            smoothing=0,
+            total=self._total,
+        )
+        return bar
+
+    def init_validation_tqdm(self):
+        bar = tqdm(
+            desc='running validation...',
+            initial=self.train_batch_idx,
+            position=(2 * self.process_position),
+            disable=self.is_disabled,
+            leave=True,
+            dynamic_ncols=True,
+            file=sys.stdout,
+            smoothing=0,
+            total=self._val_total,
+        )
+        return bar

@@ -128,7 +128,6 @@ val_dataloader = get_dataloader(
     collate_fn=multimodal_collator,
 )
 
-
 os.makedirs(args.image_embeds_raw_dir, exist_ok=True)
 os.makedirs(args.text_embeds_raw_dir, exist_ok=True)
 
