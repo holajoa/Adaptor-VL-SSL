@@ -12,10 +12,8 @@ from utils.model_utils import get_newest_ckpt, StreamingProgressBar
 from utils.dataset_utils import torch2huggingface_dataset, get_dataloader
 from dataset.dataset import clf_collator
 from utils.args import get_train_parser
-from utils.utils import set_environment_for_aml
 
 from math import ceil
-import os
 import wandb
 
 
@@ -121,8 +119,6 @@ def main(args):
         num_nodes=1, 
         strategy="ddp", 
         # accelerator="cpu",
-        # limit_train_batches=1, 
-        # limit_val_batches=1, 
         max_epochs=args.num_train_epochs,
         log_every_n_steps=args.log_every_n_steps, 
         check_val_every_n_epoch=1, 

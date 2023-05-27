@@ -1,7 +1,8 @@
 import torch
 
 from pytorch_lightning import Trainer, seed_everything
-from pytorch_lightning.loggers import CSVLogger
+from pytorch_lightning.loggers import CSVLogger, WandbLogger
+import pytorch_lightning.callbacks as cb
 
 from dataset.dataset import MultimodalPretrainedEmbeddingsDataset
 from models.adaptor import Adaptor
@@ -11,7 +12,7 @@ from utils.model_utils import StreamingProgressBar
 from utils.args import get_train_parser
 
 from math import ceil
-import logging
+import wandb
 
 
 def main(args):
@@ -75,7 +76,16 @@ def main(args):
     
     ### Training
     seed_everything(args.seed)
-    logger = CSVLogger(args.output_dir)
+    if args.wandb:
+        wandb.login(key='b0236e7bef7b6a3789ca4f305406ab358812da3d')
+        logger = WandbLogger(log_model="all", save_dir=args.output_dir, job_type="train")
+        logger.watch(model, log_freq=max(100, args.log_every_n_steps))
+        logger.log_hyperparams(vars(args))
+        experiment_dir = logger.experiment.dir
+        callbacks += [cb.LearningRateMonitor()]
+    else:
+        logger = CSVLogger(args.output_dir)
+        
     trainer = Trainer(
         accelerator="gpu", 
         devices=args.n_gpus, 
@@ -83,7 +93,7 @@ def main(args):
         strategy="ddp", 
         # accelerator="cpu",
         max_epochs=args.num_train_epochs,
-        log_every_n_steps=200, 
+        log_every_n_steps=args.log_every_n_steps, 
         check_val_every_n_epoch=1, 
         default_root_dir=args.output_dir,
         callbacks=[StreamingProgressBar(total=args.max_steps//args.num_train_epochs, 
