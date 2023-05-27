@@ -3,7 +3,7 @@ from typing import List, Union, Tuple, Dict, Optional
 import torch 
 import torch.nn as nn
 
-from torchmetrics import Accuracy
+from torchmetrics import Accuracy, AUROC
 
 import pytorch_lightning as pl
 
@@ -12,7 +12,6 @@ from transformers import BertModel
 
 from transformers.modeling_outputs import ImageClassifierOutput
 from transformers.models.clip.modeling_clip import CLIPOutput
-from transformers.models.clip.modeling_clip import clip_loss
 
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
@@ -99,7 +98,7 @@ class AdaptorPipelineBase(pl.LightningModule):
     def _shared_eval(self, batch, batch_idx, prefix):
         outputs = self(**batch)
         loss = outputs.loss
-        self.log(f'{prefix}_loss', loss)
+        self.log(f'{prefix}_loss', loss,  on_epoch=True, logger=True)
         
     def validation_step(self, batch, batch_idx):
         self._shared_eval(batch, batch_idx, "val")
@@ -109,7 +108,12 @@ class AdaptorPipelineBase(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.lr, weight_decay=0.05)
-        lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=2, eta_min=self.lr/10)
+        lr_schedule = CosineAnnealingWarmRestarts(
+            optimizer=optimizer, 
+            T_0=int(self.training_steps*0.4), 
+            T_mult=1, 
+            eta_min=1e-8, 
+        )
         return {'optimizer':optimizer, 'lr_scheduler':lr_schedule}
 
     def get_progress_bar_dict(self):
@@ -117,6 +121,15 @@ class AdaptorPipelineBase(pl.LightningModule):
         items = super().get_progress_bar_dict()
         items.pop("v_num", None)
         return items
+    
+    # @staticmethod
+    # def training_steps(train_dataset, batch_size, num_train_epochs):
+    #     return ceil(len(train_dataset) / batch_size) * num_train_epochs
+    
+    # @staticmethod
+    # def val_steps(val_dataset, batch_size, num_train_epochs):
+    #     return ceil(len(val_dataset) / batch_size)
+        
     
 
 class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
@@ -139,11 +152,11 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
         self.loss_func = nn.BCELoss(reduction='mean')
         
         if num_classes > 1:
-            self.accuracy = Accuracy(task="multiclass", num_classes=num_classes)
-            self.val_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
+            self.metrics = AUROC(task="multiclass", num_classes=num_classes)
+            self.val_metrics = AUROC(task="multiclass", num_classes=num_classes)
         else:
-            self.accuracy = Accuracy(task='binary')
-            self.val_accuracy = Accuracy(task='binary')
+            self.metrics = AUROC(task='binary')
+            self.val_metrics = AUROC(task='binary')
         
         self.save_hyperparameters(ignore=["text_model", "vision_model"])
         
@@ -190,8 +203,8 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
         
         y = batch['labels']
         preds = nn.Sigmoid()(outputs.logits)
-        self.accuracy(preds, y)
-        self.log('train_acc_step', self.accuracy, on_step=True, prog_bar=True, logger=True)
+        self.metrics(preds, y)
+        self.log('train_auroc_step', self.metrics, on_step=True, prog_bar=True)
         
         self.lr_schedulers().step()
         return loss
@@ -199,16 +212,16 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
     def _shared_eval(self, batch, batch_idx, prefix):
         outputs = self(**batch)
         loss = outputs.loss
-        self.log(f'{prefix}_loss', loss, on_step=True, logger=True)
+        self.log(f'{prefix}_loss', loss, on_step=True)
         
         y = batch['labels']
         preds = nn.Sigmoid()(outputs.logits)
-        self.val_accuracy.update(preds, y)
+        self.val_metrics.update(preds, y)
         
     def training_epoch_end(self, outputs):
-        self.accuracy.reset()
+        self.metrics.reset()
     
     def validation_epoch_end(self, outputs):
-        self.log('valid_acc_epoch', self.val_accuracy.compute(), on_epoch=True, logger=True)
-        self.val_accuracy.reset()
+        self.log('val_auroc_epoch', self.val_metrics.compute(), on_epoch=True, logger=True)
+        self.val_metrics.reset()
         

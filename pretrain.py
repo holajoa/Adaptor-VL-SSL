@@ -1,15 +1,16 @@
 import torch
 
 from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning.loggers import CSVLogger
 
 from dataset.dataset import MultimodalPretrainedEmbeddingsDataset
-from models.adaptor import Adaptor, StreamingProgressBar
+from models.adaptor import Adaptor
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
 from utils.dataset_utils import torch2huggingface_dataset, get_dataloader
+from utils.model_utils import StreamingProgressBar
 from utils.args import get_train_parser
 
 from math import ceil
-import argparse 
 import logging
 
 
@@ -42,16 +43,19 @@ def main(args):
     train_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_model, args.vision_model, 
                                                           split='train', num_of_samples=args.num_of_samples, 
                                                           device=dataset_device, shuffle=True, seed=args.seed)
+    
+    val_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_model, args.vision_model, 
+                                                        split='valid', num_of_samples=args.num_of_samples, 
+                                                        device=dataset_device)
+    
     args.max_steps = ceil(len(train_dataset) / args.batch_size) * args.num_train_epochs
+    args.val_steps = ceil(len(val_dataset) / args.batch_size)
     print(f'Number of training samples used: {len(train_dataset)}')
     print(f'Total number of training steps: {args.max_steps}')
 
     train_dataset = torch2huggingface_dataset(train_dataset, streaming=False)
     train_dataset.with_format('torch')
 
-    val_dataset = MultimodalPretrainedEmbeddingsDataset(args.text_model, args.vision_model, 
-                                                        split='valid', num_of_samples=args.num_of_samples, 
-                                                        device=dataset_device)
     val_dataset = torch2huggingface_dataset(val_dataset, streaming=False)
     val_dataset.with_format('torch')
 
@@ -71,34 +75,31 @@ def main(args):
     
     ### Training
     seed_everything(args.seed)
+    logger = CSVLogger(args.output_dir)
     trainer = Trainer(
         accelerator="gpu", 
-        devices=args.n_gpu, 
+        devices=args.n_gpus, 
+        num_nodes=1, 
         strategy="ddp", 
         # accelerator="cpu",
         max_epochs=args.num_train_epochs,
-        # max_steps=args.max_steps,
         log_every_n_steps=200, 
         check_val_every_n_epoch=1, 
         default_root_dir=args.output_dir,
-        callbacks=[StreamingProgressBar(total=args.max_steps//args.num_train_epochs)],
+        callbacks=[StreamingProgressBar(total=args.max_steps//args.num_train_epochs, 
+                                        val_total=args.val_steps)],
         enable_progress_bar=False, 
+        logger=logger, 
     )
+    
+    model.training_steps = args.max_steps
+    model.validation_steps = args.val_steps
+    
     trainer.fit(model, train_dataloader, val_dataloader)
 
 
 if __name__ == '__main__':
     parser = get_train_parser()
     args = parser.parse_args()
-
-    from time import gmtime, strftime
-
-    log_fn = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
-    logging.basicConfig(filename=f'logs/train_from_embeds_{log_fn}.log', encoding='utf-8', level=logging.INFO)
-
-    num_of_gpus = torch.cuda.device_count()
-    logging.info(f"Number of available GPUs = {num_of_gpus}: "
-                f"{', '.join([torch.cuda.get_device_properties(i).name for i in range(num_of_gpus)])}.")
-    
     main(args)
     

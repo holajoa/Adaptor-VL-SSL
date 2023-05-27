@@ -4,8 +4,6 @@ import torch
 import torch.nn as nn
 
 import pytorch_lightning as pl
-from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import TQDMProgressBar
 
 from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertEncoder, BertPooler
@@ -268,46 +266,17 @@ class Adaptor(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.lr, weight_decay=0.05)
-        lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=2, eta_min=self.lr/10)
+        lr_schedule = CosineAnnealingWarmRestarts(
+            optimizer=optimizer, 
+            T_0=int(self.training_steps*0.4), 
+            T_mult=1, 
+            eta_min=1e-8, 
+        )
         return {'optimizer':optimizer, 'lr_scheduler':lr_schedule}
-
+    
     def get_progress_bar_dict(self):
         # don't show the version number
         items = super().get_progress_bar_dict()
         items.pop("v_num", None)
         return items
         
-        
-class StreamingProgressBar(TQDMProgressBar):
-    def __init__(self, total:int, val_total:Optional[int]=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._total = total
-        self._val_total = val_total
-         
-    def init_train_tqdm(self):
-        bar = tqdm(
-            desc='Training',
-            initial=self.train_batch_idx,
-            position=(2 * self.process_position),
-            disable=self.is_disabled,
-            leave=True,
-            dynamic_ncols=True,
-            file=sys.stdout,
-            smoothing=0,
-            total=self._total,
-        )
-        return bar
-
-    def init_validation_tqdm(self):
-        bar = tqdm(
-            desc='running validation...',
-            initial=self.train_batch_idx,
-            position=(2 * self.process_position),
-            disable=self.is_disabled,
-            leave=True,
-            dynamic_ncols=True,
-            file=sys.stdout,
-            smoothing=0,
-            total=self._val_total,
-        )
-        return bar

@@ -1,21 +1,22 @@
 import torch
 
 from pytorch_lightning import Trainer, seed_everything
-from pytorch_lightning.loggers import CSVLogger
+from pytorch_lightning.loggers import CSVLogger, WandbLogger
+import pytorch_lightning.callbacks as cb
 
 from mgca.datasets.classification_dataset import RSNAImageDataset, COVIDXImageDataset
-from mgca.datasets.transforms import DataTransforms
 
-from models.adaptor import StreamingProgressBar
 from models.pipeline import AdaptorPipelineWithClassificationHead
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
-from utils.model_utils import get_newest_ckpt
+from utils.model_utils import get_newest_ckpt, StreamingProgressBar
 from utils.dataset_utils import torch2huggingface_dataset, get_dataloader
 from dataset.dataset import clf_collator
 from utils.args import get_train_parser
+from utils.utils import set_environment_for_aml
 
 from math import ceil
-import logging
+import os
+import wandb
 
 
 def main(args):
@@ -96,27 +97,43 @@ def main(args):
         num_classes=1, 
     )
     
-    seed_everything(42)
+    seed_everything(args.seed)
     
-    from time import gmtime, strftime
-    log_fn = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
-    logger = CSVLogger(args.output_dir)
+    callbacks = [StreamingProgressBar(total=args.max_steps//args.num_train_epochs, val_total=args.val_steps)]
+    
+    if args.wandb:
+        wandb.login(key='b0236e7bef7b6a3789ca4f305406ab358812da3d')
+        logger = WandbLogger(log_model="all", save_dir=args.output_dir, job_type="train")
+        logger.watch(model, log_freq=max(100, args.log_every_n_steps))
+        logger.log_hyperparams(vars(args))
+        experiment_dir = logger.experiment.dir
+        callbacks += [
+            cb.LearningRateMonitor(), 
+            cb.ModelCheckpoint(monitor="train_auroc_step", mode="max"), 
+            cb.ModelCheckpoint(monitor="val_auroc_epoch", mode="max"), 
+        ]
+    else:
+        logger = CSVLogger(args.output_dir)
     
     trainer = Trainer(
         accelerator="gpu", 
-        devices=args.n_gpu, 
+        devices=args.n_gpus, 
+        num_nodes=1, 
         strategy="ddp", 
         # accelerator="cpu",
+        # limit_train_batches=1, 
+        # limit_val_batches=1, 
         max_epochs=args.num_train_epochs,
-        # max_steps=args.max_steps,
-        log_every_n_steps=200, 
+        log_every_n_steps=args.log_every_n_steps, 
         check_val_every_n_epoch=1, 
         default_root_dir=args.output_dir,
-        callbacks=[StreamingProgressBar(total=args.max_steps//args.num_train_epochs, 
-                                        val_total=args.val_steps)],
+        callbacks=callbacks,
         enable_progress_bar=False, 
         logger=logger, 
     )
+    model.training_steps = args.max_steps
+    model.validation_steps = args.val_steps
+    
     trainer.fit(model, train_dataloader, val_dataloader)
     
   
@@ -124,15 +141,5 @@ if __name__ == '__main__':
     parser = get_train_parser()
     parser.add_argument('--dataset', type=str, required=True, help="Choose between 'covidx' and 'rsna'")
     args = parser.parse_args()
-
-    # from time import gmtime, strftime
-
-    # log_fn = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
-    # logging.basicConfig(filename=f'logs/clf_finetune_{log_fn}.log', encoding='utf-8', level=logging.INFO)
-
-    # num_of_gpus = torch.cuda.device_count()
-    # logging.info(f"Number of available GPUs = {num_of_gpus}: "
-    #             f"{', '.join([torch.cuda.get_device_properties(i).name for i in range(num_of_gpus)])}.")
-    
     main(args)
     

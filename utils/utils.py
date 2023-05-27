@@ -108,3 +108,19 @@ def get_text_embeds_raw(
                 break
             out[batch_idx*batch_size:(batch_idx+1)*batch_size] = text_embeds_raw.detach().cpu().numpy()
         np.save(os.path.join(save_path, f'{model_name}_{split}.npy'), out)
+
+
+def set_environment_for_aml(num_nodes, gpus_per_node):
+    if num_nodes > 1:        
+        os.environ['MASTER_ADDRESS'], os.environ['MASTER_PORT'] = os.environ.get("AZ_BATCH_MASTER_NODE").split(':')
+
+    else:
+        os.environ["MASTER_ADDRESS"] = os.environ["AZ_BATCHAI_MPI_MASTER_NODE"]
+        os.environ["MASTER_PORT"] = "47586"
+
+    os.environ["MASTER_ADDR"] = os.environ.get('MASTER_ADDRESS')
+
+    os.environ["NODE_RANK"] = str(int(os.environ.get("OMPI_COMM_WORLD_RANK")) // gpus_per_node)
+    os.environ["LOCAL_RANK"] = os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", "")
+    os.environ["WORLD_SIZE"] = os.environ.get("OMPI_COMM_WORLD_SIZE")
+    
