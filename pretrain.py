@@ -6,6 +6,7 @@ from dataset.dataset import MultimodalPretrainedEmbeddingsDataset
 from models.adaptor import Adaptor, StreamingProgressBar
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
 from utils.dataset_utils import torch2huggingface_dataset, get_dataloader
+from utils.args import get_train_parser
 
 from math import ceil
 import argparse 
@@ -77,7 +78,7 @@ def main(args):
         # accelerator="cpu",
         max_epochs=args.num_train_epochs,
         # max_steps=args.max_steps,
-        log_every_n_steps=100, 
+        log_every_n_steps=200, 
         check_val_every_n_epoch=1, 
         default_root_dir=args.output_dir,
         callbacks=[StreamingProgressBar(total=args.max_steps//args.num_train_epochs)],
@@ -87,32 +88,8 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--vision_model', type=str, help='Choose from [resnet-ae, swin-base]')
-    parser.add_argument('--text_model', type=str, 
-                        help='Choose from [bert, biobert, pubmedbert, cxrbert, clinicalbert]')
-    parser.add_argument('--num_of_samples', type=int, default=-1, help='number of samples to use')
-    parser.add_argument('--batch_size', type=int, default=32)
-
-    parser.add_argument('--force_rebuild_dataset', action='store_true', help='Whether to force rebuild dataset, if not can load pickled file if available')
-    parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--data_pct', type=float, default=1.0, help='percentage of data to use')
-    parser.add_argument('--crop_size', type=int, default=224)
-
-    parser.add_argument('--num_hidden_layers', type=int, default=1, help='number of transformer layers to use in adaptor')
-    parser.add_argument('--projection_dim', type=int, default=768, help='dimension of projection head')
-
-    parser.add_argument('--lr', type=float, default=1e-4)
-    parser.add_argument('--num_train_epochs', type=int, default=1)
-
-    parser.add_argument('--output_dir', type=str, default='./results', help='path to save model')
-    
-    parser.add_argument('--n_gpu', type=int, default=2, help='number of gpus to use')
-    parser.add_argument('--seed', type=int, default=1117)
-    parser.add_argument('--local_rank', default=-1, type=int, help='node rank for distributed training')
-    
+    parser = get_train_parser()
     args = parser.parse_args()
-
 
     from time import gmtime, strftime
 

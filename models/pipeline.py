@@ -3,6 +3,8 @@ from typing import List, Union, Tuple, Dict, Optional
 import torch 
 import torch.nn as nn
 
+from torchmetrics import Accuracy
+
 import pytorch_lightning as pl
 
 from transformers import AutoTokenizer
@@ -109,6 +111,12 @@ class AdaptorPipelineBase(pl.LightningModule):
         optimizer = AdamW(self.parameters(), lr=self.lr, weight_decay=0.05)
         lr_schedule = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=2, eta_min=self.lr/10)
         return {'optimizer':optimizer, 'lr_scheduler':lr_schedule}
+
+    def get_progress_bar_dict(self):
+        # don't show the version number
+        items = super().get_progress_bar_dict()
+        items.pop("v_num", None)
+        return items
     
 
 class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
@@ -130,17 +138,20 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
         self.classifier = nn.Linear(self.adaptor.projection_dim, num_classes)
         self.loss_func = nn.BCELoss(reduction='mean')
         
+        if num_classes > 1:
+            self.accuracy = Accuracy(task="multiclass", num_classes=num_classes)
+            self.val_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
+        else:
+            self.accuracy = Accuracy(task='binary')
+            self.val_accuracy = Accuracy(task='binary')
+        
         self.save_hyperparameters(ignore=["text_model", "vision_model"])
         
     def forward(
         self,
-        # input_ids: Optional[torch.LongTensor] = None,
         pixel_values:torch.FloatTensor,
         labels:torch.LongTensor, 
-        # attention_mask: Optional[torch.Tensor] = None,
-        # position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = True,
-        # token_type_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
@@ -165,10 +176,39 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
         
         logits = self.classifier(image_embeds)
         probs = nn.Sigmoid()(logits)
-        loss = self.loss_func(probs, labels)
+        loss = self.loss_func(probs.float(), labels.float())
         
         if not return_dict:
             return loss, logits if return_loss else logits
         
         return ImageClassifierOutput(loss=loss, logits=logits)
+        
+    def training_step(self, batch, batch_idx):
+        outputs = self(**batch)
+        loss = outputs.loss
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        
+        y = batch['labels']
+        preds = nn.Sigmoid()(outputs.logits)
+        self.accuracy(preds, y)
+        self.log('train_acc_step', self.accuracy, on_step=True, prog_bar=True, logger=True)
+        
+        self.lr_schedulers().step()
+        return loss
+    
+    def _shared_eval(self, batch, batch_idx, prefix):
+        outputs = self(**batch)
+        loss = outputs.loss
+        self.log(f'{prefix}_loss', loss, on_step=True, logger=True)
+        
+        y = batch['labels']
+        preds = nn.Sigmoid()(outputs.logits)
+        self.val_accuracy.update(preds, y)
+        
+    def training_epoch_end(self, outputs):
+        self.accuracy.reset()
+    
+    def validation_epoch_end(self, outputs):
+        self.log('valid_acc_epoch', self.val_accuracy.compute(), on_epoch=True, logger=True)
+        self.val_accuracy.reset()
         

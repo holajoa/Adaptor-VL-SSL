@@ -279,9 +279,10 @@ class Adaptor(pl.LightningModule):
         
         
 class StreamingProgressBar(TQDMProgressBar):
-    def __init__(self, total:int, *args, **kwargs):
+    def __init__(self, total:int, val_total:Optional[int]=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._total = total
+        self._val_total = val_total
          
     def init_train_tqdm(self):
         bar = tqdm(
@@ -294,5 +295,19 @@ class StreamingProgressBar(TQDMProgressBar):
             file=sys.stdout,
             smoothing=0,
             total=self._total,
+        )
+        return bar
+
+    def init_validation_tqdm(self):
+        bar = tqdm(
+            desc='running validation...',
+            initial=self.train_batch_idx,
+            position=(2 * self.process_position),
+            disable=self.is_disabled,
+            leave=True,
+            dynamic_ncols=True,
+            file=sys.stdout,
+            smoothing=0,
+            total=self._val_total,
         )
         return bar

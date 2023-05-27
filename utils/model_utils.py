@@ -6,6 +6,8 @@ import timm
 import torch.nn as nn
 from torch.nn import Module
 
+import os
+
 
 def load_timm_model(model_name='swin_base_patch4_window7_224', retain_head=False, pretrained=True):
     model = timm.create_model(model_name, pretrained=pretrained)
@@ -41,3 +43,8 @@ def load_vision_model(vision_model_type:str,
             return AutoModel.from_pretrained(vision_pretrained)
         return AutoModel.from_pretrained(vision_pretrained).base_model
 
+def get_newest_ckpt(vision_model, text_model):
+    base_dir = f'/vol/bitbucket/jq619/individual-project/trained_models/pretrain/{vision_model}_{text_model}/lightning_logs/'
+    base_dir = os.path.join([os.path.abspath(os.path.join(base_dir, p)) for p in os.listdir(base_dir)][-1], 'checkpoints')
+    ckpt = [os.path.abspath(os.path.join(base_dir, p)) for p in os.listdir(base_dir)][-1]
+    return ckpt
