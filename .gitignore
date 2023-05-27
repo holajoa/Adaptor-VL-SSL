@@ -4,8 +4,7 @@ events.out.*
 saved_embeddings*
 saved_datasets/*
 *.out
-results/*
-lightning_logs/*
+trained_models/*
 
 # Byte-compiled / optimized / DLL files
 data/*

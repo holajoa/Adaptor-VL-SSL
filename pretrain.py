@@ -5,7 +5,6 @@ from pytorch_lightning import Trainer, seed_everything
 from dataset.dataset import MultimodalPretrainedEmbeddingsDataset
 from models.adaptor import Adaptor, StreamingProgressBar
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
-from utils.model_utils import load_vision_model
 from utils.dataset_utils import torch2huggingface_dataset, get_dataloader
 
 from math import ceil
@@ -74,7 +73,7 @@ def main(args):
     trainer = Trainer(
         accelerator="gpu", 
         devices=args.n_gpu, 
-        strategy="ddp" , 
+        strategy="ddp", 
         # accelerator="cpu",
         max_epochs=args.num_train_epochs,
         # max_steps=args.max_steps,
