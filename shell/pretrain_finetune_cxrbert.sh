@@ -10,8 +10,9 @@ TERM=vt100 # or TERM=xterm
 export WANDB_DIR=/vol/bitbucket/jq619/
 export WANDB_DATA_DIR=/vol/bitbucket/jq619/wandb/
 export SAVED_MODEL_DIR="/vol/bitbucket/jq619/individual-project/trained_models/pretrain"
+# export VISION_MODEL="swin-base" 
 export VISION_MODEL="resnet-ae" 
-export TEXT_MODEL="clinicalbert"
+export TEXT_MODEL="cxrbert"
 # python ./pretrain.py --vision_model $VISION_MODEL --text_model $TEXT_MODEL --batch_size 128 --data_pct 1.0 --num_workers 1 --num_hidden_layers 1 --num_train_epochs 50 --seed 42 --lr 2e-5 --output_dir $SAVED_MODEL_DIR/${VISION_MODEL}_${TEXT_MODEL} --wandb
 export DATASET="rsna"
 export SAVED_MODEL_DIR="/vol/bitbucket/jq619/individual-project/trained_models/clf"

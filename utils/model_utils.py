@@ -5,7 +5,8 @@ import timm
 
 import torch.nn as nn
 from torch.nn import Module
-from pytorch_lightning.callbacks import TQDMProgressBar
+from pytorch_lightning.callbacks import TQDMProgressBar, Callback
+from pytorch_lightning import LightningModule
 
 from tqdm import tqdm
 import sys
@@ -46,8 +47,9 @@ def load_vision_model(vision_model_type:str,
             return AutoModel.from_pretrained(vision_pretrained)
         return AutoModel.from_pretrained(vision_pretrained).base_model
 
-def get_newest_ckpt(vision_model, text_model):
-    base_dir = f'/vol/bitbucket/jq619/individual-project/trained_models/pretrain/{vision_model}_{text_model}/default/'
+def get_newest_ckpt(vision_model, text_model, wandb=False):
+    project_name = 'individual-project' if wandb else 'default' 
+    base_dir = f'/vol/bitbucket/jq619/individual-project/trained_models/pretrain/{vision_model}_{text_model}/{project_name}/'
     base_dir = os.path.join([os.path.abspath(os.path.join(base_dir, p)) for p in os.listdir(base_dir)][-1], 'checkpoints')
     ckpt = [os.path.abspath(os.path.join(base_dir, p)) for p in os.listdir(base_dir)][-1]
     return ckpt
@@ -85,3 +87,12 @@ class StreamingProgressBar(TQDMProgressBar):
             total=self._val_total,
         )
         return bar
+
+
+class TestEveryEpochCallback(Callback):
+    def __init__(self, datamodule):
+        self.datamodule = datamodule
+
+    def on_save_checkpoint(self, trainer, pl_module, checkpoint):
+        trainer.test(pl_module, self.datamodule)
+    

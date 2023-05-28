@@ -4,13 +4,12 @@ from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.loggers import CSVLogger, WandbLogger
 import pytorch_lightning.callbacks as cb
 
-from mgca.datasets.classification_dataset import RSNAImageDataset, COVIDXImageDataset
-
 from models.pipeline import AdaptorPipelineWithClassificationHead
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
-from utils.model_utils import get_newest_ckpt, StreamingProgressBar
-from utils.dataset_utils import torch2huggingface_dataset, get_dataloader
+from utils.model_utils import get_newest_ckpt, StreamingProgressBar, TestEveryEpochCallback
 from dataset.dataset import clf_collator
+from dataset.configurations import DATASET_CFG  
+from dataset.data_module import AdaptorDataModule
 from utils.args import get_train_parser
 
 from math import ceil
@@ -33,71 +32,41 @@ def main(args):
     data_transform = vision_model_config['data_transform']
     args.text_pretrained = TEXT_PRETRAINED[args.text_model]
     
-    if args.dataset == 'rsna':
-        train_dataset = RSNAImageDataset(
-            split='train', 
-            transform=data_transform(True, args.crop_size), 
-            phase='classification', 
-            data_pct=args.data_pct, 
-            imsize=args.crop_size, 
-        )
-        val_dataset = RSNAImageDataset(
-            split='valid', 
-            transform=data_transform(False, args.crop_size), 
-            phase='classification', 
-            data_pct=args.data_pct, 
-            imsize=args.crop_size, 
-        )
-    elif args.dataset == 'covidx':
-        train_dataset = COVIDXImageDataset(
-            split='train', 
-            transform=data_transform(True, args.crop_size), 
-            data_pct=1., 
-            imsize=args.crop_size, 
-        )
-        val_dataset = COVIDXImageDataset(
-            split='valid', 
-            transform=data_transform(False, args.crop_size), 
-            data_pct=args.data_pct, 
-            imsize=args.crop_size, 
-        )
-    else:
-        raise ValueError("Must specify dataset - choose between 'covidx' and 'rsna'.")
+    dataset_cfg = DATASET_CFG[args.dataset]
+    dataset_class = dataset_cfg['class']
+    dataset_kwargs = dataset_cfg['kwargs']
+
+    data_module = AdaptorDataModule(
+        dataset=dataset_class, 
+        collate_fn=clf_collator, 
+        transforms=data_transform,
+        data_pct=args.data_pct, 
+        batch_size=args.batch_size, 
+        num_workers=1,
+        crop_size=args.crop_size, 
+        seed=args.seed,
+        **dataset_kwargs, 
+    )
+    data_module.setup(stage='fit')
     
-    args.max_steps = ceil(len(train_dataset) / args.batch_size) * args.num_train_epochs
-    args.val_steps = ceil(len(val_dataset) / args.batch_size)
-    print(f'Number of training samples used: {len(train_dataset)}')
+    args.max_steps = data_module.train_steps * args.num_train_epochs
+    args.val_steps = data_module.val_steps
+    # print(f"Number of training samples used: {len(data_module.datasets['train'])}")
     print(f'Total number of training steps: {args.max_steps}')
-    
-    train_dataset = torch2huggingface_dataset(train_dataset, streaming=False)
-    train_dataset.with_format('torch')
-    
-    val_dataset = torch2huggingface_dataset(val_dataset, streaming=False)
-    val_dataset.with_format('torch')
-    
-    train_dataloader = get_dataloader(
-        train_dataset, 
-        batch_size=args.batch_size,
-        num_workers=1,
-        collate_fn=clf_collator,
-    )
-    val_dataloader = get_dataloader(
-        val_dataset, 
-        batch_size=args.batch_size,
-        num_workers=1,
-        collate_fn=clf_collator,
-    )
-    
+
     model = AdaptorPipelineWithClassificationHead(
         text_model=args.text_model, 
         vision_model=args.vision_model, 
-        adaptor_ckpt=get_newest_ckpt(args.vision_model, args.text_model), 
+        adaptor_ckpt=get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb), 
         num_classes=1, 
     )
     
-    seed_everything(args.seed)
+    seed_everything(args.seed, workers=True)
     
-    callbacks = [StreamingProgressBar(total=args.max_steps//args.num_train_epochs, val_total=args.val_steps)]
+    callbacks = [
+        StreamingProgressBar(total=data_module.train_steps, val_total=data_module.val_steps), 
+        # TestEveryEpochCallback(data_module), 
+    ]
     
     if args.wandb:
         wandb.login(key='b0236e7bef7b6a3789ca4f305406ab358812da3d')
@@ -119,6 +88,8 @@ def main(args):
         num_nodes=1, 
         strategy="ddp", 
         # accelerator="cpu",
+        # limit_train_batches=1,
+        # limit_val_batches=1,
         max_epochs=args.num_train_epochs,
         log_every_n_steps=args.log_every_n_steps, 
         check_val_every_n_epoch=1, 
@@ -126,16 +97,20 @@ def main(args):
         callbacks=callbacks,
         enable_progress_bar=False, 
         logger=logger, 
+        deterministic=True, 
     )
     model.training_steps = args.max_steps
     model.validation_steps = args.val_steps
     
-    trainer.fit(model, train_dataloader, val_dataloader)
+    trainer.fit(model, datamodule=data_module)
+    trainer.test(model, datamodule=data_module)
     
   
 if __name__ == '__main__':
     parser = get_train_parser()
     parser.add_argument('--dataset', type=str, required=True, help="Choose between 'covidx' and 'rsna'")
     args = parser.parse_args()
+
+    print('Number of GPUs available:', torch.cuda.device_count())
     main(args)
     

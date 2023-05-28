@@ -76,6 +76,7 @@ def main(args):
     
     ### Training
     seed_everything(args.seed)
+    callbacks = [StreamingProgressBar(total=args.max_steps//args.num_train_epochs, val_total=args.val_steps)]
     if args.wandb:
         wandb.login(key='b0236e7bef7b6a3789ca4f305406ab358812da3d')
         logger = WandbLogger(log_model="all", save_dir=args.output_dir, job_type="train")
@@ -96,8 +97,7 @@ def main(args):
         log_every_n_steps=args.log_every_n_steps, 
         check_val_every_n_epoch=1, 
         default_root_dir=args.output_dir,
-        callbacks=[StreamingProgressBar(total=args.max_steps//args.num_train_epochs, 
-                                        val_total=args.val_steps)],
+        callbacks=callbacks,
         enable_progress_bar=False, 
         logger=logger, 
     )

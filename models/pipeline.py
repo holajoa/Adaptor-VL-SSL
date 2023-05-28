@@ -154,9 +154,11 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
         if num_classes > 1:
             self.metrics = AUROC(task="multiclass", num_classes=num_classes)
             self.val_metrics = AUROC(task="multiclass", num_classes=num_classes)
+            self.test_metrics = AUROC(task="multiclass", num_classes=num_classes)
         else:
             self.metrics = AUROC(task='binary')
             self.val_metrics = AUROC(task='binary')
+            self.test_metrics = AUROC(task='binary')
         
         self.save_hyperparameters(ignore=["text_model", "vision_model"])
         
@@ -213,10 +215,12 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
         outputs = self(**batch)
         loss = outputs.loss
         self.log(f'{prefix}_loss', loss, on_step=True)
+
+        metrics = self.test_metrics if prefix == 'test' else self.val_metrics
         
         y = batch['labels']
         preds = nn.Sigmoid()(outputs.logits)
-        self.val_metrics.update(preds, y)
+        metrics.update(preds, y)
         
     def training_epoch_end(self, outputs):
         self.metrics.reset()
@@ -224,4 +228,7 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
     def validation_epoch_end(self, outputs):
         self.log('val_auroc_epoch', self.val_metrics.compute(), on_epoch=True, logger=True)
         self.val_metrics.reset()
-        
+
+    def test_epoch_end(self, outputs):
+        self.log('test_auroc_epoch', self.test_metrics.compute(), on_epoch=True, logger=True)
+        self.test_metrics.reset()

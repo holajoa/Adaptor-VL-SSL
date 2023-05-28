@@ -121,17 +121,19 @@ def pickle_dataset(dataset_pkl, split, transform=None, data_pct=1.0,
     return ds
 
 
-def torch2huggingface_dataset(torch_dataset, streaming=True):
+def torch2huggingface_dataset(torch_dataset, streaming=True, shuffle=False, seed=42):
     if streaming:
         def gen():
             for ex in torch_dataset:
                 yield ex
-        return Dataset.from_generator(gen, streaming=True)
+        return Dataset.from_generator(gen, streaming=True, cache_dir='/vol/bitbucket/jq619/.cache/huggingface/datasets')
         
     else:
+        shuffled_indices = np.arange(len(torch_dataset))
+        if shuffle:
+            np.random.seed(seed)
+            np.random.shuffle(shuffled_indices)
         def gen():
             for idx in range(len(torch_dataset)):
-                yield torch_dataset[idx]
-        return Dataset.from_generator(gen, streaming=True)
-    
-    
+                yield torch_dataset[shuffled_indices[idx]]
+        return Dataset.from_generator(gen, streaming=True, cache_dir='/vol/bitbucket/jq619/.cache/huggingface/datasets')
