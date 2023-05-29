@@ -28,4 +28,5 @@ def get_train_parser():
     parser.add_argument('--local_rank', default=-1, type=int, help='node rank for distributed training')
     
     parser.add_argument('--wandb', action='store_true')
+    parser.add_argument('--cache_dir', default='/vol/bitbucket/jq619/.cache/huggingface/')
     return parser

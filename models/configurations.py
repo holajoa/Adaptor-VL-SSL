@@ -2,6 +2,8 @@ from mgca.datasets.transforms import DataTransforms
 from utils.dataset_utils import AutoEncoderDataTransforms
 
 
+CACHE_DIR = '/vol/bitbucket/jq619/.cache/huggingface/'
+
 TEXT_PRETRAINED = {
     'bert': 'bert-base-uncased',
     'biobert': 'dmis-lab/biobert-v1.1',

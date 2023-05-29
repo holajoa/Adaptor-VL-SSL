@@ -59,6 +59,7 @@ def main(args):
         vision_model=args.vision_model, 
         adaptor_ckpt=get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb), 
         num_classes=1, 
+        lr=args.lr, 
     )
     
     seed_everything(args.seed, workers=True)

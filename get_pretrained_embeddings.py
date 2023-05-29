@@ -88,7 +88,7 @@ vision_model = load_vision_model(args.vision_model_type, args.vision_pretrained)
 vision_model.to(device)
 
 ### Load text model
-text_model = BertModel.from_pretrained(args.text_pretrained)
+text_model = BertModel.from_pretrained(args.text_pretrained, cache_dir=args.cache_dir)
 tokenizer = AutoTokenizer.from_pretrained(args.text_pretrained)
 text_model.to(device)
 

@@ -17,7 +17,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 from models.adaptor import Adaptor
-from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
+from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED, CACHE_DIR
 from utils.model_utils import load_vision_model
 
 import logging
@@ -48,8 +48,8 @@ class AdaptorPipelineBase(pl.LightningModule):
             vision_pretrained=vision_pretrained, 
             retain_head=False,
         )
-        self.text_model = BertModel.from_pretrained(self.text_pretrained)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.text_pretrained)
+        self.text_model = BertModel.from_pretrained(self.text_pretrained, cache_dir=CACHE_DIR)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.text_pretrained, cache_dir=CACHE_DIR)
         self.adaptor = Adaptor.load_from_checkpoint(adaptor_ckpt)
         
         self.lr = lr
