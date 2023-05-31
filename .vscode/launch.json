@@ -51,9 +51,9 @@
             "python":"/vol/bitbucket/jq619/idv/bin/python", 
             "args":[
                 "--vision_model", 
-                "resnet-ae", 
+                "dinov2-b", 
                 "--text_model", 
-                "biobert", 
+                "clinicalbert", 
                 "--batch_size", 
                 "16", 
                 "--lr", 

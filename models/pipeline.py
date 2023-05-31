@@ -73,13 +73,15 @@ class AdaptorPipelineBase(pl.LightningModule):
                 return_dict=return_dict,
             )
             image_embeds_raw = vision_outputs.pooler_output
-        elif self.vision_model_type == 'timm':
+        elif self.vision_model_type in 'timm':
             image_embeds_raw = self.vision_model(pixel_values)[:, 0, :]
         elif self.vision_model_type == 'ae':
             vision_outputs = self.vision_model(pixel_values)
             image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1)).mean(1)
+        elif self.vision_model_type == 'hub':
+            image_embeds_raw = self.vision_model(pixel_values)
         else: 
-            logging.ERROR(f'{self.vision_model_type} is not supported.')
+            raise ValueError(f'{self.vision_model_type} is not supported.')
         assert len(image_embeds_raw.shape) == 2
         
         outputs = self.adaptor(image_embeds_raw)
