@@ -151,16 +151,23 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
         )
         self.num_classes = num_classes
         self.classifier = nn.Linear(self.adaptor.projection_dim, num_classes)
-        self.loss_func = nn.BCELoss(reduction='mean')
+        if self.num_classes == 1:
+            self.loss_func = nn.BCEWithLogitsLoss(reduction='mean')  
+        else:
+            self.loss_func = nn.CrossEntropyLoss(weight=torch.ones(num_classes), reduction='mean')
+        if self.num_classes > 1:
+            self.one_hot = lambda t: nn.functional.one_hot(t, num_classes)
         
         if num_classes > 1:
-            self.metrics = AUROC(task="multiclass", num_classes=num_classes)
-            self.val_metrics = AUROC(task="multiclass", num_classes=num_classes)
-            self.test_metrics = AUROC(task="multiclass", num_classes=num_classes)
+            self.metrics = Accuracy(task='multiclass', num_classes=num_classes)
+            self.val_metrics = Accuracy(task="multiclass", num_classes=num_classes)
+            self.test_metrics = Accuracy(task="multiclass", num_classes=num_classes)
+            self.metric_name = 'accuracy'
         else:
             self.metrics = AUROC(task='binary')
             self.val_metrics = AUROC(task='binary')
             self.test_metrics = AUROC(task='binary')
+            self.metric_name = 'auroc'
         
         self.save_hyperparameters(ignore=["text_model", "vision_model"])
         
@@ -191,9 +198,11 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
         else:  # should always run this
             image_embeds = adaptor_output
         
+        if self.num_classes > 1:
+            labels = self.one_hot(labels.flatten().long())
         logits = self.classifier(image_embeds)
-        probs = nn.Sigmoid()(logits)
-        loss = self.loss_func(probs.float(), labels.float())
+        # probs = nn.Sigmoid()(logits)
+        loss = self.loss_func(logits.float(), labels.float())
         
         if not return_dict:
             return loss, logits if return_loss else logits
@@ -203,12 +212,15 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
     def training_step(self, batch, batch_idx):
         outputs = self(**batch)
         loss = outputs.loss
+        logits = outputs.logits
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         
         y = batch['labels']
-        preds = nn.Sigmoid()(outputs.logits)
-        self.metrics(preds, y)
-        self.log('train_auroc_step', self.metrics, on_step=True, prog_bar=True)
+        if self.num_classes > 1:
+            y = y.squeeze().long()
+        # preds = nn.Sigmoid()(outputs.logits)
+        self.metrics(logits, y)
+        self.log(f'train_{self.metrics_name}_step', self.metrics, on_step=True, prog_bar=True)
         
         self.lr_schedulers().step()
         return loss
@@ -216,21 +228,24 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
     def _shared_eval(self, batch, batch_idx, prefix):
         outputs = self(**batch)
         loss = outputs.loss
+        logits = outputs.logits
         self.log(f'{prefix}_loss', loss, on_step=True)
 
         metrics = self.test_metrics if prefix == 'test' else self.val_metrics
         
         y = batch['labels']
-        preds = nn.Sigmoid()(outputs.logits)
-        metrics.update(preds, y)
+        if self.num_classes > 1:
+            y = y.squeeze().long()
+        # preds = nn.Sigmoid()(outputs.logits)
+        metrics.update(logits, y)
         
     def training_epoch_end(self, outputs):
         self.metrics.reset()
     
     def validation_epoch_end(self, outputs):
-        self.log('val_auroc_epoch', self.val_metrics.compute(), on_epoch=True, logger=True)
+        self.log(f'val_{self.metrics_name}_epoch', self.val_metrics.compute(), on_epoch=True, logger=True)
         self.val_metrics.reset()
 
     def test_epoch_end(self, outputs):
-        self.log('test_auroc_epoch', self.test_metrics.compute(), on_epoch=True, logger=True)
+        self.log(f'test_{self.metrics_name}_epoch', self.test_metrics.compute(), on_epoch=True, logger=True)
         self.test_metrics.reset()

@@ -4,9 +4,11 @@ DATASET_CFG = {
     'rsna': {
         'class':RSNAImageDataset,
         'kwargs':{'phase':'classigication'}, 
+        'num_classes':1, 
     }, 
     'covidx':{
         'class':COVIDXImageDataset, 
         'kwargs':dict(), 
+        'num_classes':3, 
     },
 }

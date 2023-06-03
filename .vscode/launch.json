@@ -71,7 +71,7 @@
                 "--crop_size", 
                 "224", 
                 "--dataset", 
-                "rsna", 
+                "covidx", 
                 "--wandb", 
             ], 
             "justMyCode": false, 

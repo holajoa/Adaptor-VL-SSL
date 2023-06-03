@@ -58,7 +58,7 @@ def main(args):
         text_model=args.text_model, 
         vision_model=args.vision_model, 
         adaptor_ckpt=get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb), 
-        num_classes=1, 
+        num_classes=dataset_cfg['num_classes'], 
         lr=args.lr, 
     )
     
@@ -77,8 +77,8 @@ def main(args):
         experiment_dir = logger.experiment.dir
         callbacks += [
             cb.LearningRateMonitor(), 
-            cb.ModelCheckpoint(monitor="train_auroc_step", mode="max"), 
-            cb.ModelCheckpoint(monitor="val_auroc_epoch", mode="max"), 
+            cb.ModelCheckpoint(monitor=f"train_{model.metric_name}_step", mode="max"), 
+            cb.ModelCheckpoint(monitor=f"val_{model.metric_name}_epoch", mode="max"), 
         ]
     else:
         logger = CSVLogger(args.output_dir)
