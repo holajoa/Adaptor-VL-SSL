@@ -79,18 +79,17 @@ def main(args):
             cb.LearningRateMonitor(), 
             cb.ModelCheckpoint(monitor=f"train_{model.metric_name}_step", mode="max"), 
             cb.ModelCheckpoint(monitor=f"val_{model.metric_name}_epoch", mode="max"), 
+            cb.EarlyStopping(monitor="val_loss", min_delta=0., patience=args.num_train_epochs//3, verbose=False, mode="min")
         ]
     else:
         logger = CSVLogger(args.output_dir)
     
+    if args.cpu:
+        device_kwargs = {'accelerator':'cpu'}
+    else:
+        device_kwargs = {'accelerator':'gpu', 'devices':args.n_gpus, 'num_nodes':1, 'strategy':'ddp'}
+        
     trainer = Trainer(
-        accelerator="gpu", 
-        devices=args.n_gpus, 
-        num_nodes=1, 
-        strategy="ddp", 
-        # accelerator="cpu",
-        # limit_train_batches=1,
-        # limit_val_batches=1,
         max_epochs=args.num_train_epochs,
         log_every_n_steps=args.log_every_n_steps, 
         check_val_every_n_epoch=1, 
@@ -99,6 +98,7 @@ def main(args):
         enable_progress_bar=False, 
         logger=logger, 
         deterministic=True, 
+        **device_kwargs, 
     )
     model.training_steps = args.max_steps
     model.validation_steps = args.val_steps

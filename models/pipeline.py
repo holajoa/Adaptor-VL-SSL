@@ -220,7 +220,7 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
             y = y.squeeze().long()
         # preds = nn.Sigmoid()(outputs.logits)
         self.metrics(logits, y)
-        self.log(f'train_{self.metrics_name}_step', self.metrics, on_step=True, prog_bar=True)
+        self.log(f'train_{self.metric_name}_step', self.metrics, on_step=True, prog_bar=True)
         
         self.lr_schedulers().step()
         return loss
@@ -243,9 +243,9 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
         self.metrics.reset()
     
     def validation_epoch_end(self, outputs):
-        self.log(f'val_{self.metrics_name}_epoch', self.val_metrics.compute(), on_epoch=True, logger=True)
+        self.log(f'val_{self.metric_name}_epoch', self.val_metrics.compute(), on_epoch=True, logger=True)
         self.val_metrics.reset()
 
     def test_epoch_end(self, outputs):
-        self.log(f'test_{self.metrics_name}_epoch', self.test_metrics.compute(), on_epoch=True, logger=True)
+        self.log(f'test_{self.metric_name}_epoch', self.test_metrics.compute(), on_epoch=True, logger=True)
         self.test_metrics.reset()
