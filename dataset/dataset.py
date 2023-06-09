@@ -30,7 +30,8 @@ class MultimodalDataset(torch.utils.data.Dataset):
                  data_pct=1.0, 
                  imsize=256, 
                  tokenizer=None,
-                 max_words=112):
+                 max_words=112,
+                 validate_path=True):
         super().__init__()
         if not os.path.exists(MIMIC_CXR_DATA_DIR):
             raise RuntimeError(f"{MIMIC_CXR_DATA_DIR} does not exist!")
@@ -40,6 +41,7 @@ class MultimodalDataset(torch.utils.data.Dataset):
         self.imsize = imsize
         self.df = None
         self.max_words = max_words
+        self.validate_path = validate_path
         
         if isinstance(tokenizer, str):
             self.tokenizer = BertTokenizer.from_pretrained(tokenizer)
@@ -71,7 +73,7 @@ class MultimodalDataset(torch.utils.data.Dataset):
                 
                 if cur_split == self.split and path in path2sent:
                     ### Addition: make sure path points to an existing file ==========
-                    if not Path(path).is_file():
+                    if self.validate_path and not Path(path).is_file():
                         removed_indices.append(row.Index)
                         continue
                     ### End addition =================================================
@@ -181,9 +183,11 @@ class MultimodalPretrainingDatasetForAdaptor(MultimodalDataset):
                  data_pct=1.0, 
                  imsize=256, 
                  tokenizer=None,
-                 max_words=112):
+                 max_words=112, 
+                 validate_path=True):
         super().__init__(split=split, transform=transform, data_pct=data_pct, 
-                         imsize=imsize, tokenizer=tokenizer, max_words=max_words)
+                         imsize=imsize, tokenizer=tokenizer, max_words=max_words, 
+                         validate_path=validate_path)
         
         self.df = read_csv(MIMIC_CXR_MASTER_CSV)
         self.df = self.df[self.df[MIMIC_CXR_VIEW_COL].isin(["PA", "AP"])]

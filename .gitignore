@@ -5,6 +5,7 @@ saved_embeddings*
 saved_datasets/*
 *.out
 trained_models/*
+trained_models_/*
 
 # Byte-compiled / optimized / DLL files
 data/*

@@ -1,0 +1,7 @@
+adaptor_config: null
+logit_scale_init_value: 2.6592
+lr: 5.0e-05
+num_hidden_layers: 1
+projection_dim: 768
+text_output_dim: 768
+vision_output_dim: 384

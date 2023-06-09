@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from torchmetrics import Accuracy, AUROC
 
-import pytorch_lightning as pl
+from pytorch_lightning import LightningModule
 
 from transformers import AutoTokenizer
 from transformers import BertModel
@@ -20,15 +20,18 @@ from models.adaptor import Adaptor
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED, CACHE_DIR
 from utils.model_utils import load_vision_model
 
+# from mgca.models.ssl_segmenter import SSLSegmenter
+
 import logging
 
 
-def freeze_encoder(model:pl.LightningModule):
+def freeze_encoder(model:LightningModule):
     for encoder in [model.text_model, model.vision_model]:
         for param in encoder.parameters():
             param.requires_grad = False
 
-class AdaptorPipelineBase(pl.LightningModule):
+
+class AdaptorPipelineBase(LightningModule):
     def __init__(
         self, 
         text_model:str,
@@ -65,24 +68,16 @@ class AdaptorPipelineBase(pl.LightningModule):
         **kwargs, 
     ) -> Union[Tuple[torch.Tensor], CLIPOutput, torch.Tensor]:
         assert pixel_values is not None, "Must pass pixel_values."
-        if self.vision_model_type == 'huggingface':
-            vision_outputs = self.vision_model(
-                pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            image_embeds_raw = vision_outputs.pooler_output
-        elif self.vision_model_type in 'timm':
-            image_embeds_raw = self.vision_model(pixel_values)[:, 0, :]
+        if self.vision_model_type in 'timm':
+            image_embeds_raw = self.vision_model(pixel_values)#[:, 0, :]
         elif self.vision_model_type == 'ae':
-            vision_outputs = self.vision_model(pixel_values)
-            image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1)).mean(1)
+            vision_outputs = self.vision_model.encode(pixel_values)
+            image_embeds_raw = torch.flatten(vision_outputs, start_dim=2).permute((0, 2, 1))#.mean(1)
         elif self.vision_model_type == 'hub':
-            image_embeds_raw = self.vision_model(pixel_values)
+            image_embeds_raw = self.vision_model(pixel_values).unsqueeze(1)
         else: 
             raise ValueError(f'{self.vision_model_type} is not supported.')
-        assert len(image_embeds_raw.shape) == 2
+        assert len(image_embeds_raw.shape) == 3 # 2
         
         outputs = self.adaptor(image_embeds_raw)
         image_embeds = outputs  #.last_hidden_state[:, 0, :]
@@ -122,16 +117,7 @@ class AdaptorPipelineBase(pl.LightningModule):
         # don't show the version number
         items = super().get_progress_bar_dict()
         items.pop("v_num", None)
-        return items
-    
-    # @staticmethod
-    # def training_steps(train_dataset, batch_size, num_train_epochs):
-    #     return ceil(len(train_dataset) / batch_size) * num_train_epochs
-    
-    # @staticmethod
-    # def val_steps(val_dataset, batch_size, num_train_epochs):
-    #     return ceil(len(val_dataset) / batch_size)
-        
+        return items        
     
 
 class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
@@ -188,15 +174,9 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
             return_dict=return_dict, 
             **kwargs, 
         )
-        if isinstance(adaptor_output, CLIPOutput):
-            image_embeds = adaptor_output.image_embeds
-        elif isinstance(adaptor_output, Tuple):
-            if len(adaptor_output) == 2:
-                image_embeds = adaptor_output[1][-1]
-            else:
-                image_embeds = adaptor_output[-1]
-        else:  # should always run this
-            image_embeds = adaptor_output
+        image_embeds = adaptor_output
+        if len(image_embeds.shape) == 3:
+            image_embeds = image_embeds[:, 0, :] 
         
         if self.num_classes > 1:
             labels = self.one_hot(labels.flatten().long())
@@ -218,7 +198,6 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
         y = batch['labels']
         if self.num_classes > 1:
             y = y.squeeze().long()
-        # preds = nn.Sigmoid()(outputs.logits)
         self.metrics(logits, y)
         self.log(f'train_{self.metric_name}_step', self.metrics, on_step=True, prog_bar=True)
         
@@ -249,3 +228,42 @@ class AdaptorPipelineWithClassificationHead(AdaptorPipelineBase):
     def test_epoch_end(self, outputs):
         self.log(f'test_{self.metric_name}_epoch', self.test_metrics.compute(), on_epoch=True, logger=True)
         self.test_metrics.reset()
+
+
+# class AdaptorPipelineWithSegmentationHead(AdaptorPipelineBase):
+#     def __init__(
+#         self, 
+#         text_model:str,
+#         vision_model:str,
+#         adaptor_ckpt:str,
+#         lr:float=2e-5,
+#         *seg_args, 
+#     ):
+#         super(AdaptorPipelineWithSegmentationnHead, self).__init__(
+#             text_model=text_model, 
+#             vision_model=vision_model, 
+#             adaptor_ckpt=adaptor_ckpt, 
+#             lr=lr, 
+#         )
+#         self.num_classes = num_classes
+#         self.seg_model = SSLSegmenter(**seg_args.__dict__)
+    
+
+#     def forward(
+#         self,
+#         pixel_values:torch.FloatTensor,
+#         labels:torch.LongTensor, 
+#         return_loss: Optional[bool] = True,
+#         output_attentions: Optional[bool] = None,
+#         output_hidden_states: Optional[bool] = None,
+#         return_dict: Optional[bool] = True,
+#         **kwargs, 
+#     ):
+#         image_embeds = super(AdaptorPiptlineWithSegmentationHead, self).forward(
+#             pixel_values=pixel_values,
+#             output_attentions=output_attentions, 
+#             output_hidden_states=output_hidden_states, 
+#             return_dict=return_dict, 
+#             **kwargs, 
+#         )
+        

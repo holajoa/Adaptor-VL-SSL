@@ -6,7 +6,7 @@ import pytorch_lightning.callbacks as cb
 
 from models.pipeline import AdaptorPipelineWithClassificationHead
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
-from utils.model_utils import get_newest_ckpt, StreamingProgressBar, TestEveryEpochCallback
+from utils.model_utils import freeze_adaptor, get_newest_ckpt, StreamingProgressBar, TestEveryEpochCallback
 from dataset.dataset import clf_collator
 from dataset.configurations import DATASET_CFG  
 from dataset.data_module import AdaptorDataModule
@@ -61,12 +61,13 @@ def main(args):
         num_classes=dataset_cfg['num_classes'], 
         lr=args.lr, 
     )
+    if not args.unfreeze_adaptor:
+        freeze_adaptor(model)
     
     seed_everything(args.seed, workers=True)
     
     callbacks = [
         StreamingProgressBar(total=data_module.train_steps, val_total=data_module.val_steps), 
-        # TestEveryEpochCallback(data_module), 
     ]
     
     if args.wandb:
@@ -110,6 +111,7 @@ def main(args):
 if __name__ == '__main__':
     parser = get_train_parser()
     parser.add_argument('--dataset', type=str, required=True, help="Choose between 'covidx' and 'rsna'")
+    parser.add_argument('--unfreeze_adaptor', action='store_true')
     args = parser.parse_args()
 
     print('Number of GPUs available:', torch.cuda.device_count())

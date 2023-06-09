@@ -19,6 +19,7 @@ def get_image_embeds_raw(
     model_name='',
     split='train', 
     device='cuda',
+    full=False, 
 ):  
     if not model_name:
         model_name = vision_model_type
@@ -28,47 +29,91 @@ def get_image_embeds_raw(
         device = next(vision_model.parameters()).device  # timm-loaded model is a nn.Sequential
     else:
         device = vision_model.device
-        
-    # Initialise empty npy
-    num_batches = len(dataloader)
-    out = np.zeros((len(dataloader.dataset), embedding_dim), dtype=np.float32) 
     
-    vision_model.eval()
-    with torch.no_grad():
-        for batch_idx, inputs in enumerate(tqdm(dataloader)):
-            for k, v in inputs.items():
-                if isinstance(v, torch.Tensor):
-                    inputs[k] = v.to(device=device)
-            if batch_idx == 0:
-                assert inputs['pixel_values'].size(0) == batch_size, \
-                    f'Expected batch size {batch_size}, got {inputs.pixel_values.size(0)}'
+    if full:
+        vision_model.eval()
+        with torch.no_grad():
+            for batch_idx, inputs in enumerate(tqdm(dataloader)):
+                for k, v in inputs.items():
+                    if isinstance(v, torch.Tensor):
+                        inputs[k] = v.to(device=device)
+                if batch_idx == 0:
+                    assert inputs['pixel_values'].size(0) == batch_size, \
+                        f'Expected batch size {batch_size}, got {inputs.pixel_values.size(0)}'
 
-            if vision_model_type == 'huggingface':
-                vision_outputs = vision_model(
-                    inputs.pixel_values,
-                    output_attentions=False,
-                    output_hidden_states=False,
-                    return_dict=True,
-                )
-                image_embeds_raw = vision_outputs.pooler_output
-            elif vision_model_type == 'timm':
-                image_embeds_raw = vision_model(inputs['pixel_values'])[:, 0, :]
-            elif vision_model_type == 'hub':
-                image_embeds_raw = vision_model(inputs['pixel_values'])
-            elif vision_model_type == 'ae':
-                vision_outputs = vision_model(inputs['pixel_values'])
-                image_embeds_raw = torch.flatten(vision_outputs['z'], start_dim=2).permute((0, 2, 1)).mean(1)
-            else: 
-                raise ValueError(f'{vision_model_type} is not supported.')
-            assert len(image_embeds_raw.size()) == 2, f'Expected 2D tensor, got {image_embeds_raw.size()}'
-            
-            if batch_idx == num_batches - 1:
-                out[batch_idx*batch_size:] = image_embeds_raw.detach().cpu().numpy()
-                break
-            out[batch_idx*batch_size:(batch_idx+1)*batch_size] = image_embeds_raw.detach().cpu().numpy()
-            
-        np.save(os.path.join(save_path, f'{model_name}_{split}.npy'), out)
+                if vision_model_type == 'huggingface':
+                    vision_outputs = vision_model(
+                        inputs.pixel_values,
+                        output_attentions=False,
+                        output_hidden_states=False,
+                        return_dict=True,
+                    )
+                    image_embeds_raw = vision_outputs.last_hidden_states
+                elif vision_model_type == 'timm':
+                    image_embeds_raw = vision_model(inputs['pixel_values'])#[:, 0, :]
+                elif vision_model_type == 'hub':
+                    output = vision_model(inputs['pixel_values'], is_training=True)
+                    local = output['x_norm_patchtokens']
+                    cls = output['x_norm_clstoken'].unsqueeze(1)
+                    image_embeds_raw = torch.concat([cls, local], dim=1)
+                elif vision_model_type == 'ae':
+                    vision_outputs = vision_model.decode(inputs['pixel_values'])
+                    image_embeds_raw = torch.flatten(vision_outputs, start_dim=2).permute((0, 2, 1)) #.mean(1)
+                else: 
+                    raise ValueError(f'{vision_model_type} is not supported.')
+                assert len(image_embeds_raw.size()) == 3, f'Expected 3D tensor, got {image_embeds_raw.size()}'
+                
+                if batch_idx == 0:
+                    seq_len = image_embeds_raw.shape[1]
+                    out = np.zeros((len(dataloader.dataset), seq_len, embedding_dim), dtype=np.float32) 
+                    
+                if batch_idx == num_batches - 1:
+                    out[batch_idx*batch_size:] = image_embeds_raw.detach().cpu().numpy()
+                    break
+                out[batch_idx*batch_size:(batch_idx+1)*batch_size] = image_embeds_raw.detach().cpu().numpy()
+                
+            np.save(os.path.join(save_path, f'{model_name}_{split}.npy'), out)
+    else:
+        # Initialise empty npy
+        num_batches = len(dataloader)
+        out = np.zeros((len(dataloader.dataset), embedding_dim), dtype=np.float32) 
         
+        vision_model.eval()
+        with torch.no_grad():
+            for batch_idx, inputs in enumerate(tqdm(dataloader)):
+                for k, v in inputs.items():
+                    if isinstance(v, torch.Tensor):
+                        inputs[k] = v.to(device=device)
+                if batch_idx == 0:
+                    assert inputs['pixel_values'].size(0) == batch_size, \
+                        f'Expected batch size {batch_size}, got {inputs.pixel_values.size(0)}'
+
+                if vision_model_type == 'huggingface':
+                    vision_outputs = vision_model(
+                        inputs.pixel_values,
+                        output_attentions=False,
+                        output_hidden_states=False,
+                        return_dict=True,
+                    )
+                    image_embeds_raw = vision_outputs.pooler_output
+                elif vision_model_type == 'timm':
+                    image_embeds_raw = vision_model(inputs['pixel_values'])[:, 0, :]
+                elif vision_model_type == 'hub':
+                    image_embeds_raw = vision_model(inputs['pixel_values'])
+                elif vision_model_type == 'ae':
+                    vision_outputs = vision_model.decode(inputs['pixel_values'])
+                    image_embeds_raw = torch.flatten(vision_outputs, start_dim=2).permute((0, 2, 1)).mean(1)
+                else: 
+                    raise ValueError(f'{vision_model_type} is not supported.')
+                assert len(image_embeds_raw.size()) == 2, f'Expected 2D tensor, got {image_embeds_raw.size()}'
+                
+                if batch_idx == num_batches - 1:
+                    out[batch_idx*batch_size:] = image_embeds_raw.detach().cpu().numpy()
+                    break
+                out[batch_idx*batch_size:(batch_idx+1)*batch_size] = image_embeds_raw.detach().cpu().numpy()
+                
+            np.save(os.path.join(save_path, f'{model_name}_{split}.npy'), out)
+            
 
 def get_text_embeds_raw(
     dataloader, 
