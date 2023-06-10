@@ -34,7 +34,7 @@ def main(args):
     model = Adaptor(
         vision_output_dim=args.vision_output_dim,
         projection_dim=args.projection_dim,
-        num_hidden_layers=args.num_hidden_layers, 
+        # num_hidden_layers=args.num_hidden_layers, 
         lr=args.lr, 
     )
 
@@ -79,20 +79,24 @@ def main(args):
     callbacks = [StreamingProgressBar(total=args.max_steps//args.num_train_epochs, val_total=args.val_steps)]
     if args.wandb:
         wandb.login(key='b0236e7bef7b6a3789ca4f305406ab358812da3d')
-        logger = WandbLogger(log_model="all", save_dir=args.output_dir, job_type="train")
+        logger = WandbLogger(
+            project='adaptor pretrain', 
+            name=f"{args.vision_model}_{args.text_model}_{args.data_pct}", 
+            log_model="all", save_dir=args.output_dir, job_type="train"
+        )
         logger.watch(model, log_freq=max(100, args.log_every_n_steps))
         logger.log_hyperparams(vars(args))
         experiment_dir = logger.experiment.dir
         callbacks += [cb.LearningRateMonitor()]
     else:
         logger = CSVLogger(args.output_dir)
-        
+    
+    if args.cpu:
+        device_kwargs = {'accelerator':'cpu'}
+    else:
+        device_kwargs = {'accelerator':'gpu', 'devices':args.n_gpus, 'num_nodes':1, 'strategy':'ddp'}
+            
     trainer = Trainer(
-        accelerator="gpu", 
-        devices=args.n_gpus, 
-        num_nodes=1, 
-        strategy="ddp", 
-        # accelerator="cpu",
         max_epochs=args.num_train_epochs,
         log_every_n_steps=args.log_every_n_steps, 
         check_val_every_n_epoch=1, 
@@ -100,6 +104,7 @@ def main(args):
         callbacks=callbacks,
         enable_progress_bar=False, 
         logger=logger, 
+        **device_kwargs, 
     )
     
     model.training_steps = args.max_steps

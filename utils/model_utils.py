@@ -1,10 +1,7 @@
 from transformers import AutoModel
 from typing import Optional 
 
-import timm
-
 import torch.nn as nn
-from torch.nn import Module
 from pytorch_lightning.callbacks import TQDMProgressBar, Callback
 from pytorch_lightning import LightningModule
 
@@ -13,7 +10,13 @@ import sys
 import os
 
 
+def freeze_adaptor(model:LightningModule):
+    for param in model.adaptor.parameters():
+        param.requires_grad = False
+
+
 def load_timm_model(model_name='swin_base_patch4_window7_224', retain_head=False, pretrained=True):
+    import timm
     model = timm.create_model(model_name, pretrained=pretrained)
     if not retain_head:
         return nn.Sequential(*list(model.children())[:-2])
@@ -22,7 +25,7 @@ def load_timm_model(model_name='swin_base_patch4_window7_224', retain_head=False
 
 def load_vision_model(vision_model_type:str, 
                       vision_pretrained:Optional[str]=None,
-                      retain_head:bool=False) -> Module:
+                      retain_head:bool=False) -> nn.Module:
     if vision_model_type == 'ae':
         import torchxrayvision as xrv
         if not vision_pretrained:
@@ -48,7 +51,7 @@ def load_vision_model(vision_model_type:str,
         return AutoModel.from_pretrained(vision_pretrained).base_model
 
 def get_newest_ckpt(vision_model, text_model, wandb=False):
-    project_name = 'individual-project' if wandb else 'default' 
+    project_name = 'adaptor pretrain' if wandb else 'default' 
     base_dir = f'/vol/bitbucket/jq619/individual-project/trained_models/pretrain/{vision_model}_{text_model}/{project_name}/'
     base_dir = os.path.join([os.path.abspath(os.path.join(base_dir, p)) for p in os.listdir(base_dir)][-1], 'checkpoints')
     ckpt = [os.path.abspath(os.path.join(base_dir, p)) for p in os.listdir(base_dir)][-1]

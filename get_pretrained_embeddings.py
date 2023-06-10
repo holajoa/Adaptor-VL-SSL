@@ -41,6 +41,8 @@ parser.add_argument('--num_workers', type=int, default=8)
 parser.add_argument('--data_pct', type=float, default=0.01, help='percentage of data to use. If setting 1.0, then use all data with no shuffling')
 parser.add_argument('--crop_size', type=int, default=224)
 
+parser.add_argument('--full', action='store_true', help='Compute global and local vision features.')
+
 # parser.add_argument('--num_hidden_layers', type=int, default=1, help='number of transformer layers to use in adaptor')
 # parser.add_argument('--projection_dim', type=int, default=768, help='dimension of projection head')
 
@@ -88,7 +90,7 @@ vision_model = load_vision_model(args.vision_model_type, args.vision_pretrained)
 vision_model.to(device)
 
 ### Load text model
-text_model = BertModel.from_pretrained(args.text_pretrained, cache_dir=args.cache_dir)
+text_model = BertModel.from_pretrained(args.text_pretrained)
 tokenizer = AutoTokenizer.from_pretrained(args.text_pretrained)
 text_model.to(device)
 
@@ -103,6 +105,7 @@ train_dataset = pickle_dataset(
     transform=data_transforms(True, args.crop_size), 
     data_pct=args.data_pct, 
     force_rebuild=args.force_rebuild_dataset, 
+    validate_path=args.force_rebuild_dataset, 
     tokenizer=tokenizer,
 )
 val_dataset = pickle_dataset(
@@ -111,6 +114,7 @@ val_dataset = pickle_dataset(
     transform=data_transforms(False, args.crop_size),
     data_pct=args.data_pct, 
     force_rebuild=args.force_rebuild_dataset, 
+    validate_path=args.force_rebuild_dataset, 
     tokenizer=tokenizer,
 )
 
@@ -155,6 +159,7 @@ for split, dataloader in zip(['train', 'valid'], [train_dataloader, val_dataload
             embedding_dim=args.vision_output_dim,
             split=split,
             device=device,
+            full=args.full, 
         )
     
     
