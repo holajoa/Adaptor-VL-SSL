@@ -1,12 +1,8 @@
 """Modified from https://github.com/zhoudaxia233/PyTorch-Unet/blob/master/resnet_unet.py"""
 
 import torch.nn as nn
-import torch.nn.functional as F
 import torch
 import torchxrayvision as xrv
-
-from segmentation_models_pytorch.encoders._base import EncoderMixin
-import segmentation_models_pytorch as smp
 
 
 def double_conv(in_channels, out_channels):
@@ -26,7 +22,7 @@ def up_conv(in_channels, out_channels):
     )
     
 class ResNetAEUNet(nn.Module):
-    def __init__(self, adaptor:Adaptor, pretrained=False, out_channels=1):
+    def __init__(self, adaptor, pretrained=False, out_channels=1):
         super().__init__()
         
         resnet_ae = xrv.autoencoders.ResNetAE(weights="101-elastic")

@@ -5,6 +5,25 @@ from pytorch_lightning.loggers import CSVLogger, WandbLogger
 import pytorch_lightning.callbacks as cb
 
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
+from models.segmenter import AdaptorSegmenter
+from models.adaptor import Adaptor
+from models.unet import ResNetAEUNet
+from utils.model_utils import get_newest_ckpt, StreamingProgressBar
+from dataset.dataset import clf_collator
+from dataset.configurations import DATASET_CFG  
+from dataset.data_module import AdaptorDataModule
+from utils.args import get_train_parser
+
+from math import ceil
+import wandb
+
+import torch
+
+from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning.loggers import CSVLogger, WandbLogger
+import pytorch_lightning.callbacks as cb
+
+from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
 from models.finetuner import AdaptorFinetuner
 from models.adaptor import Adaptor
 from utils.model_utils import get_newest_ckpt, StreamingProgressBar
@@ -62,37 +81,29 @@ def main(args):
     vision_model_config = VISION_PRETRAINED[args.vision_model]
     vision_pretrained = vision_model_config['pretrained_weight']
     vision_model_type = vision_model_config['vision_model_type']
-    backbone = load_vision_model(
-        vision_model_type=vision_model_type, 
-        vision_pretrained=vision_pretrained,
-        retain_head=False, 
-    )
+    # backbone = load_vision_model(
+    #     vision_model_type=vision_model_type, 
+    #     vision_pretrained=vision_pretrained,
+    #     retain_head=False, 
+    # )
     adaptor_ckpt = get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb)
     adaptor = Adaptor.load_from_checkpoint(adaptor_ckpt)
     
-    model = AdaptorFinetuner(
-       backbone=backbone,
+    if args.vision_model == 'resnet-ae':
+        seg_model = ResNetAEUNet(
+            adaptor=adaptor,
+            pretrained=False, 
+            out_channels=1, 
+        )
+    else:
+        raise NotImplementedError
+    
+    model = AdaptorSegmenter(
+       seg_model=seg_model,
        adaptor=adaptor,
-       model_name=args.vision_model,
-       in_features=adaptor.projection_dim, 
-       num_classes=dataset_cfg['num_classes'],
-       num_layers=args.num_layers,
-       hidden_dim=args.hidden_dim,
-       dropout=args.dropout,
        learning_rate=args.lr,
        weight_decay=args.weight_decay,      
-       multilabel=dataset_cfg['multilabel'],
-       freeze_adaptor=not args.unfreeze_adaptor,
     )
-    # model = AdaptorPipelineWithClassificationHead(
-    #     text_model=args.text_model, 
-    #     vision_model=args.vision_model, 
-    #     adaptor_ckpt=get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb), 
-    #     num_classes=dataset_cfg['num_classes'], 
-    #     lr=args.lr, 
-    # )
-    # if not args.unfreeze_adaptor:
-    #     freeze_adaptor(model)
     
     seed_everything(args.seed, workers=True)
     
@@ -105,7 +116,7 @@ def main(args):
         # now = datetime.datetime.now(tz.tzlocal())
         # extension = now.strftime("%Y_%m_%d_%H_%M_%S")
         logger = WandbLogger(
-            project=f"adaptor_finetune_1", 
+            project=f"adaptor_segmentation", 
             save_dir=args.output_dir, 
             job_type="train", 
             name=f"{args.vision_model}_{args.text_model}_{args.dataset}_{args.data_pct}",
@@ -115,8 +126,9 @@ def main(args):
         experiment_dir = logger.experiment.dir
         callbacks += [
             cb.LearningRateMonitor(logging_interval='step'), 
-            cb.ModelCheckpoint(monitor=f"train_{model.metric_name}_step", mode="max"), 
+            # cb.ModelCheckpoint(monitor=f"train_{model.metric_name}_step", mode="max"), 
             cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"), 
+            cb.ModelCheckpoint(monitor="val_loss", dirpath=args.output_dir, save_last=True, mode="min", save_top_k=3),
             cb.EarlyStopping(monitor=f"val_{model.metric_name}", min_delta=0., patience=10, verbose=False, mode="min")
         ]
     else:
@@ -148,11 +160,12 @@ def main(args):
 if __name__ == '__main__':
     parser = get_train_parser()
     parser.add_argument('--dataset', type=str, required=True, help="Choose between 'covidx' and 'rsna'")
-    parser.add_argument('--unfreeze_adaptor', action='store_true')
-    parser.add_argument('--hidden_dim', type=int, default=512, help="Hidden dimension of the classification head")
-    parser.add_argument('--dropout', type=float, default=0.1, help="Dropout rate of the classification head")
+    # parser.add_argument('--unfreeze_adaptor', action='store_true')
+    # parser.add_argument('--hidden_dim', type=int, default=512, help="Hidden dimension of the classification head")
+    # parser.add_argument('--dropout', type=float, default=0.1, help="Dropout rate of the classification head")
     args = parser.parse_args()
 
     print('Number of GPUs available:', torch.cuda.device_count())
     main(args)
+    
     
