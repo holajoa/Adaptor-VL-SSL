@@ -1,9 +1,5 @@
-from mgca.datasets.classification_dataset import (
-    RSNAImageDataset, COVIDXImageDataset, 
-    RSNASegmentDataset, SIIMImageDataset, 
-)
-
-
+from mgca.datasets.classification_dataset import RSNAImageDataset, COVIDXImageDataset
+from mgca.datasets.segmentation_dataset import RSNASegmentDataset, SIIMImageDataset
 
 DATASET_CFG = {
     'clf':{

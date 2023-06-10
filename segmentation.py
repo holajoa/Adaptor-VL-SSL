@@ -9,7 +9,7 @@ from models.segmenter import AdaptorSegmenter
 from models.adaptor import Adaptor
 from models.unet import ResNetAEUNet
 from utils.model_utils import get_newest_ckpt, StreamingProgressBar
-from dataset.dataset import clf_collator
+from dataset.dataset import seg_collator
 from dataset.configurations import DATASET_CFG  
 from dataset.data_module import AdaptorDataModule
 from utils.args import get_train_parser
@@ -27,7 +27,7 @@ from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
 from models.finetuner import AdaptorFinetuner
 from models.adaptor import Adaptor
 from utils.model_utils import get_newest_ckpt, StreamingProgressBar
-from dataset.dataset import clf_collator
+from dataset.dataset import seg_collator
 from dataset.configurations import DATASET_CFG  
 from dataset.data_module import AdaptorDataModule
 from utils.args import get_train_parser
@@ -56,13 +56,15 @@ def main(args):
     data_transform = vision_model_config['data_transform']
     args.text_pretrained = TEXT_PRETRAINED[args.text_model]
     
-    dataset_cfg = DATASET_CFG['clf'][args.dataset]
+    dataset_cfg = DATASET_CFG['seg'][args.dataset]
     dataset_class = dataset_cfg['class']
     dataset_kwargs = dataset_cfg['kwargs']
+    if args.vision_model == 'resnet-ae':
+        dataset_kwargs['grayscale'] = True
 
     data_module = AdaptorDataModule(
         dataset=dataset_class, 
-        collate_fn=clf_collator, 
+        collate_fn=seg_collator, 
         transforms=data_transform,
         data_pct=args.data_pct, 
         batch_size=args.batch_size, 

@@ -112,19 +112,20 @@ class ResNetAEUNet(nn.Module):
     def get_global_features(self, x):
         return torch.flatten(x, start_dim=2).permute((0, 2, 1)).mean(1) 
     
-    def forward(self, x):
+    def forward(self, x, return_dict=False):
         encoder_features = self.encode(x)
         unimodal_features = encoder_features[-1]
         global_unimodal_features = self.get_global_features(unimodal_features)
         multimodal_features = self.fusion(global_unimodal_features)
         out = self.decode(multimodal_features.unsqueeze(2).unsqueeze(3), encoder_features)
         
-        return {
-            'encoder_features': encoder_features,
-            'unimodal_features': unimodal_features,
-            'global_unimodal_features': global_unimodal_features,
-            'multimodal_features': multimodal_features,
-            'out': out, 
-        }
-    
+        if return_dict:
+            return {
+                'encoder_features': encoder_features,
+                'unimodal_features': unimodal_features,
+                'global_unimodal_features': global_unimodal_features,
+                'multimodal_features': multimodal_features,
+                'out': out, 
+            }
+        return out
     

@@ -30,8 +30,8 @@ class AdaptorSegmenter(LightningModule):
         self.metric_name = 'dice'
 
     def shared_step(self, batch, batch_idx, split):
-        x, y = batch
-        logit = self.model(x)
+        x, y = batch['image'], batch['mask']
+        logit = self.model(x, return_dict=False)
         logit = logit.squeeze(dim=1)
         loss = self.loss(logit, y)
         prob = torch.sigmoid(logit)
