@@ -91,9 +91,15 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         self,
         embed_dim:int=768,
         num_heads:int=12,
+        num_layers:int=1,
     ):
         super(AdaptorModule, self).__init__()
-        self.encoder = TransformerEncoderLayerWithCrossAttention(embed_dim, num_heads)
+        if num_layers > 1:
+            self.encoder = nn.ModuleList(
+                [TransformerEncoderLayerWithCrossAttention(embed_dim, num_heads) for _ in range(num_layers)]
+            )
+        else:
+            self.encoder = TransformerEncoderLayerWithCrossAttention(embed_dim, num_heads)
 
 
     def forward(
@@ -102,19 +108,20 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         text_embeds:Optional[torch.Tensor]=None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], torch.Tensor]:
-
+        encoder_layers = self.encoder if isinstance(self.encoder, nn.ModuleList) else [self.encoder]
         # Optional text embedding inputs
         if text_embeds is not None:
             assert text_embeds.device == image_embeds.device, "text and image embeddings must be on the same device"
             ## TODO: Run through cross-attention
-            image_encoder_outputs = self.encoder(src=image_embeds, query=text_embeds, run_cross_attn=True)
-            text_encoder_outputs = self.encoder(src=text_embeds, query=image_embeds, run_cross_attn=True)
-            return image_encoder_outputs, text_encoder_outputs
+            for layer in encoder_layers:
+                image_embeds = layer(src=image_embeds, query=text_embeds, run_cross_attn=True)
+                text_embeds = layer(src=text_embeds, query=image_embeds, run_cross_attn=True)
+            return image_embeds, text_embeds
         else:
             ## TODO: Run through self-attention
-            encoder_outputs = self.encoder(src=image_embeds, run_cross_attn=False)
-
-            return encoder_outputs
+            for layer in encoder_layers:
+                image_embeds = layer(src=image_embeds, run_cross_attn=False)
+            return image_embeds
 
 
 class Project(nn.Module):

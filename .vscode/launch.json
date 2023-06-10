@@ -50,7 +50,7 @@
             "python":"/vol/bitbucket/jq619/idv/bin/python", 
             "args":[
                 "--vision_model", 
-                "dinov2-b", 
+                "dinov2-s", 
                 "--text_model", 
                 "clinicalbert", 
                 "--batch_size", 

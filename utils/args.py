@@ -14,10 +14,11 @@ def get_train_parser():
     parser.add_argument('--data_pct', type=float, default=1.0, help='percentage of data to use')
     parser.add_argument('--crop_size', type=int, default=224)
 
-    # parser.add_argument('--num_hidden_layers', type=int, default=1, help='number of transformer layers to use in adaptor')
+    parser.add_argument('--num_layers', type=int, default=1, help='number of transformer layers to use in adaptor')
     parser.add_argument('--projection_dim', type=int, default=768, help='dimension of projection head')
 
     parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--weight_decay', type=float, default=1e-6)
     parser.add_argument('--num_train_epochs', type=int, default=1)
     parser.add_argument('--log_every_n_steps', type=int, default=200)
 
