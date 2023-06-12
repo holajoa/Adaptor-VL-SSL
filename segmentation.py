@@ -5,9 +5,9 @@ from pytorch_lightning.loggers import CSVLogger, WandbLogger
 import pytorch_lightning.callbacks as cb
 
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
-from models.segmenter import AdaptorSegmenter
 from models.adaptor import Adaptor
-from models.unet import ResNetAEUNet
+from models.segmenter import AdaptorSegmenter
+from models.seg_models import ResNetAEUNet, DINOv2Segmenter
 from utils.model_utils import get_newest_ckpt, StreamingProgressBar
 from dataset.dataset import seg_collator
 from dataset.configurations import DATASET_CFG  
@@ -83,11 +83,7 @@ def main(args):
     vision_model_config = VISION_PRETRAINED[args.vision_model]
     vision_pretrained = vision_model_config['pretrained_weight']
     vision_model_type = vision_model_config['vision_model_type']
-    # backbone = load_vision_model(
-    #     vision_model_type=vision_model_type, 
-    #     vision_pretrained=vision_pretrained,
-    #     retain_head=False, 
-    # )
+    
     adaptor_ckpt = get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb)
     adaptor = Adaptor.load_from_checkpoint(adaptor_ckpt)
     
@@ -96,6 +92,20 @@ def main(args):
             adaptor=adaptor,
             pretrained=False, 
             out_channels=1, 
+        )
+    
+    elif args.vision_model.startswith('dinov2-'):
+        backbone = load_vision_model(
+            vision_model_type=vision_model_type, 
+            vision_pretrained=vision_pretrained,
+            retain_head=False, 
+        )
+        seg_model = DINOv2Segmenter(
+            backbone=backbone,
+            adaptor=adaptor,
+            hidden_dim=adaptor.projection_dim,
+            out_channels=1,
+            features=[512, 256, 128, 64], 
         )
     else:
         raise NotImplementedError

@@ -14,11 +14,7 @@ from dataset.data_module import AdaptorDataModule
 from utils.args import get_train_parser
 from utils.model_utils import load_vision_model
 
-from math import ceil
 import wandb
-
-import datetime
-from dateutil import tz
 
 
 def main(args):
@@ -105,7 +101,7 @@ def main(args):
         # now = datetime.datetime.now(tz.tzlocal())
         # extension = now.strftime("%Y_%m_%d_%H_%M_%S")
         logger = WandbLogger(
-            project=f"adaptor_finetune_1", 
+            project=f"adaptor_finetune_3", 
             save_dir=args.output_dir, 
             job_type="train", 
             name=f"{args.vision_model}_{args.text_model}_{args.dataset}_{args.data_pct}",
@@ -117,7 +113,7 @@ def main(args):
             cb.LearningRateMonitor(logging_interval='step'), 
             cb.ModelCheckpoint(monitor=f"train_{model.metric_name}_step", mode="max"), 
             cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"), 
-            cb.EarlyStopping(monitor=f"val_{model.metric_name}", min_delta=0., patience=10, verbose=False, mode="min")
+            cb.EarlyStopping(monitor=f"val_loss", min_delta=0., patience=10//args.check_val_every_n_epochs, verbose=False, mode="min")
         ]
     else:
         logger = CSVLogger(args.output_dir)
@@ -130,7 +126,7 @@ def main(args):
     trainer = Trainer(
         max_epochs=args.num_train_epochs,
         log_every_n_steps=args.log_every_n_steps, 
-        check_val_every_n_epoch=1, 
+        check_val_every_n_epoch=args.check_val_every_n_epochs,
         default_root_dir=args.output_dir,
         callbacks=callbacks,
         enable_progress_bar=False, 
@@ -151,6 +147,7 @@ if __name__ == '__main__':
     parser.add_argument('--unfreeze_adaptor', action='store_true')
     parser.add_argument('--hidden_dim', type=int, default=512, help="Hidden dimension of the classification head")
     parser.add_argument('--dropout', type=float, default=0.1, help="Dropout rate of the classification head")
+    parser.add_argument('--check_val_every_n_epochs', type=int, default=2, help="Check validation every n epochs")
     args = parser.parse_args()
 
     print('Number of GPUs available:', torch.cuda.device_count())
