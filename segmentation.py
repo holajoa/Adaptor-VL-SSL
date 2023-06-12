@@ -8,30 +8,11 @@ from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
 from models.adaptor import Adaptor
 from models.segmenter import AdaptorSegmenter
 from models.seg_models import ResNetAEUNet, DINOv2Segmenter
-from utils.model_utils import get_newest_ckpt, StreamingProgressBar
+from utils.model_utils import get_newest_ckpt, load_vision_model, StreamingProgressBar
 from dataset.dataset import seg_collator
 from dataset.configurations import DATASET_CFG  
 from dataset.data_module import AdaptorDataModule
 from utils.args import get_train_parser
-
-from math import ceil
-import wandb
-
-import torch
-
-from pytorch_lightning import Trainer, seed_everything
-from pytorch_lightning.loggers import CSVLogger, WandbLogger
-import pytorch_lightning.callbacks as cb
-
-from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
-from models.finetuner import AdaptorFinetuner
-from models.adaptor import Adaptor
-from utils.model_utils import get_newest_ckpt, StreamingProgressBar
-from dataset.dataset import seg_collator
-from dataset.configurations import DATASET_CFG  
-from dataset.data_module import AdaptorDataModule
-from utils.args import get_train_parser
-from utils.model_utils import load_vision_model
 
 from math import ceil
 import wandb
@@ -86,6 +67,7 @@ def main(args):
     
     adaptor_ckpt = get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb)
     adaptor = Adaptor.load_from_checkpoint(adaptor_ckpt)
+    print('Loaded adaptor from checkpoint')
     
     if args.vision_model == 'resnet-ae':
         seg_model = ResNetAEUNet(
