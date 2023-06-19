@@ -31,4 +31,5 @@ def get_train_parser():
     
     parser.add_argument('--wandb', action='store_true')
     parser.add_argument('--cache_dir', default='/vol/bitbucket/jq619/.cache/huggingface/')
+    parser.add_argument('--project_name', type=str, help='wandb project name')
     return parser

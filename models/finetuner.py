@@ -22,6 +22,7 @@ class AdaptorFinetuner(LightningModule):
         dropout:float=0.0,
         learning_rate:float=5e-4,
         weight_decay:float=1e-6,
+        binary:bool=True,
         multilabel:bool=True,
         freeze_adaptor:bool=True,
         *args,
@@ -31,10 +32,11 @@ class AdaptorFinetuner(LightningModule):
         
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
-        if multilabel:
-            self.train_auc = AUROC(task='multilabel', num_classes=num_classes)
-            self.val_auc = AUROC(task='multilabel', num_classes=num_classes, compute_on_step=False)
-            self.test_auc = AUROC(task='multilabel', num_classes=num_classes, compute_on_step=False)
+        if binary:
+            assert num_classes == 1
+            self.train_auc = AUROC(task='binary')
+            self.val_auc = AUROC(task='binary', compute_on_step=False)
+            self.test_auc = AUROC(task='binary', compute_on_step=False)
             self.metric_name = 'auroc'
         else:
             self.train_acc = Accuracy(task='multiclass', num_classes=num_classes, topk=1)
@@ -52,6 +54,7 @@ class AdaptorFinetuner(LightningModule):
             for param in self.adaptor.parameters():
                 param.requires_grad = False
         self.model_name = model_name
+        self.binary = binary
         self.multilabel = multilabel
 
         self.linear_layer = SSLEvaluator(

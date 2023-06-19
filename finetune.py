@@ -77,7 +77,7 @@ def main(args):
        dropout=args.dropout,
        learning_rate=args.lr,
        weight_decay=args.weight_decay,      
-       multilabel=dataset_cfg['multilabel'],
+       binary=dataset_cfg['binary'],
        freeze_adaptor=not args.unfreeze_adaptor,
     )
     # model = AdaptorPipelineWithClassificationHead(
@@ -101,7 +101,7 @@ def main(args):
         # now = datetime.datetime.now(tz.tzlocal())
         # extension = now.strftime("%Y_%m_%d_%H_%M_%S")
         logger = WandbLogger(
-            project=f"adaptor_finetune_3", 
+            project=f"adaptor_finetune_{args.dataset}", 
             save_dir=args.output_dir, 
             job_type="train", 
             name=f"{args.vision_model}_{args.text_model}_{args.dataset}_{args.data_pct}",

@@ -22,7 +22,7 @@ def up_conv(in_channels, out_channels):
     )
     
 class ResNetAEUNet(nn.Module):
-    def __init__(self, adaptor, pretrained=False, out_channels=1):
+    def __init__(self, adaptor, pretrained=False, out_channels=1, freeze_adaptor=True):
         super().__init__()
         
         resnet_ae = xrv.autoencoders.ResNetAE(weights="101-elastic")
@@ -53,6 +53,15 @@ class ResNetAEUNet(nn.Module):
         
         if not pretrained:
             self._weights_init()
+        self._freeze_encoder()  # Freeze encoder weights
+        self.freeze_adaptor = freeze_adaptor
+        if self.freeze_adaptor:
+            self._freeze_adaptor()
+    
+    def _freeze_adaptor(self):
+        self.freeze_adaptor = True
+        for param in self.adaptor.parameters():
+            param.requires_grad = False
     
     def _freeze_encoder(self):
         for name, block in self.named_children():
@@ -143,25 +152,29 @@ class ViTDecoder(nn.Module):
             nn.Conv2d(in_channels, features[0], 3, padding=1),
             nn.BatchNorm2d(features[0]),
             nn.ReLU(inplace=True),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+            # nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True), 
+            nn.Upsample(scale_factor=2), 
         )
         self.decoder_2 = nn.Sequential(
             nn.Conv2d(features[0], features[1], 3, padding=1),
             nn.BatchNorm2d(features[1]),
             nn.ReLU(inplace=True),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+            # nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True), 
+            nn.Upsample(scale_factor=2), 
         )
         self.decoder_3 = nn.Sequential(
             nn.Conv2d(features[1], features[2], 3, padding=1),
             nn.BatchNorm2d(features[2]),
             nn.ReLU(inplace=True),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+            # nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True), 
+            nn.Upsample(scale_factor=2), 
         )
         self.decoder_4 = nn.Sequential(
             nn.Conv2d(features[2], features[3], 3, padding=1),
             nn.BatchNorm2d(features[3]),
             nn.ReLU(inplace=True),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+            # nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True), 
+            nn.Upsample(scale_factor=2), 
         )
 
         self.final_out = nn.Conv2d(features[-1], out_channels, 3, padding=1)
@@ -177,8 +190,8 @@ class ViTDecoder(nn.Module):
     
 
 class DINOv2Segmenter(nn.Module):
-    def __init__(self, backbone, adaptor, hidden_dim=384, 
-                 out_channels=1, features=[512, 256, 128, 64]):
+    def __init__(self, backbone, adaptor, hidden_dim=384, out_channels=1, 
+                 features=[512, 256, 128, 64], freeze_adaptor=True):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.out_channels = out_channels
@@ -189,6 +202,29 @@ class DINOv2Segmenter(nn.Module):
         self.decoder = ViTDecoder(in_channels=hidden_dim, 
                                  out_channels=out_channels, 
                                  features=features)
+
+        self._weights_init()
+        self._freeze_encoder()  # Freeze encoder weights
+        self.freeze_adaptor = freeze_adaptor
+        if self.freeze_adaptor:
+            self._freeze_adaptor()
+    
+    def _freeze_adaptor(self):
+        self.freeze_adaptor = True
+        for param in self.adaptor.parameters():
+            param.requires_grad = False
+    
+    def _freeze_encoder(self):
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+    
+    def _weights_init(self):
+        for m in self.decoder.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, x, return_dict=False):
         features = self.encoder(x, is_training=True)['x_norm_patchtokens']

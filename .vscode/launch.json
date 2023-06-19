@@ -101,7 +101,7 @@
                 "--crop_size", 
                 "224", 
                 "--dataset", 
-                "covidx", 
+                "rsna", 
                 "--wandb", 
                 "--cpu"
             ], 

@@ -74,6 +74,7 @@ def main(args):
             adaptor=adaptor,
             pretrained=False, 
             out_channels=1, 
+            freeze_adaptor=True,
         )
     
     elif args.vision_model.startswith('dinov2-'):
@@ -88,6 +89,7 @@ def main(args):
             hidden_dim=adaptor.projection_dim,
             out_channels=1,
             features=[512, 256, 128, 64], 
+            freeze_adaptor=True,
         )
     else:
         raise NotImplementedError
@@ -101,16 +103,17 @@ def main(args):
     
     seed_everything(args.seed, workers=True)
     
-    callbacks = [
-        StreamingProgressBar(total=data_module.train_steps, val_total=data_module.val_steps), 
-    ]
+    callbacks = [StreamingProgressBar(total=data_module.train_steps, 
+                                      val_total=data_module.val_steps)]
     
     if args.wandb:
         wandb.login(key='b0236e7bef7b6a3789ca4f305406ab358812da3d')
         # now = datetime.datetime.now(tz.tzlocal())
         # extension = now.strftime("%Y_%m_%d_%H_%M_%S")
+        if not args.project_name:
+            args.project_name = 'adaptor_segmentation'
         logger = WandbLogger(
-            project=f"adaptor_segmentation", 
+            project=f"{args.project_name}_{args.dataset}", 
             save_dir=args.output_dir, 
             job_type="train", 
             name=f"{args.vision_model}_{args.text_model}_{args.dataset}_{args.data_pct}",
@@ -120,10 +123,9 @@ def main(args):
         experiment_dir = logger.experiment.dir
         callbacks += [
             cb.LearningRateMonitor(logging_interval='step'), 
-            # cb.ModelCheckpoint(monitor=f"train_{model.metric_name}_step", mode="max"), 
+            cb.ModelCheckpoint(monitor=f"train_{model.metric_name}", mode="max"), 
             cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"), 
-            cb.ModelCheckpoint(monitor="val_loss", dirpath=args.output_dir, save_last=True, mode="min", save_top_k=3),
-            cb.EarlyStopping(monitor=f"val_{model.metric_name}", min_delta=0., patience=10, verbose=False, mode="min")
+            cb.EarlyStopping(monitor=f"val_loss", min_delta=0., patience=10, verbose=False, mode="min")
         ]
     else:
         logger = CSVLogger(args.output_dir)
@@ -154,12 +156,8 @@ def main(args):
 if __name__ == '__main__':
     parser = get_train_parser()
     parser.add_argument('--dataset', type=str, required=True, help="Choose between 'covidx' and 'rsna'")
-    # parser.add_argument('--unfreeze_adaptor', action='store_true')
-    # parser.add_argument('--hidden_dim', type=int, default=512, help="Hidden dimension of the classification head")
-    # parser.add_argument('--dropout', type=float, default=0.1, help="Dropout rate of the classification head")
     args = parser.parse_args()
 
     print('Number of GPUs available:', torch.cuda.device_count())
     main(args)
-    
     
