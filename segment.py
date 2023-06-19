@@ -5,16 +5,20 @@ from pytorch_lightning.loggers import CSVLogger, WandbLogger
 import pytorch_lightning.callbacks as cb
 
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
-from models.finetuner import AdaptorFinetuner
 from models.adaptor import Adaptor
-from utils.model_utils import get_newest_ckpt, StreamingProgressBar
-from dataset.dataset import clf_collator
+from models.segmenter import AdaptorSegmenter
+from models.seg_models import ResNetAEUNet, DINOv2Segmenter
+from utils.model_utils import get_newest_ckpt, load_vision_model, StreamingProgressBar
+from dataset.dataset import seg_collator
 from dataset.configurations import DATASET_CFG  
 from dataset.data_module import AdaptorDataModule
 from utils.args import get_train_parser
-from utils.model_utils import load_vision_model
 
+from math import ceil
 import wandb
+
+import datetime
+from dateutil import tz
 
 
 def main(args):
@@ -33,13 +37,15 @@ def main(args):
     data_transform = vision_model_config['data_transform']
     args.text_pretrained = TEXT_PRETRAINED[args.text_model]
     
-    dataset_cfg = DATASET_CFG['clf'][args.dataset]
+    dataset_cfg = DATASET_CFG['seg'][args.dataset]
     dataset_class = dataset_cfg['class']
     dataset_kwargs = dataset_cfg['kwargs']
+    if args.vision_model == 'resnet-ae':
+        dataset_kwargs['grayscale'] = True
 
     data_module = AdaptorDataModule(
         dataset=dataset_class, 
-        collate_fn=clf_collator, 
+        collate_fn=seg_collator, 
         transforms=data_transform,
         data_pct=args.data_pct, 
         batch_size=args.batch_size, 
@@ -58,50 +64,56 @@ def main(args):
     vision_model_config = VISION_PRETRAINED[args.vision_model]
     vision_pretrained = vision_model_config['pretrained_weight']
     vision_model_type = vision_model_config['vision_model_type']
-    backbone = load_vision_model(
-        vision_model_type=vision_model_type, 
-        vision_pretrained=vision_pretrained,
-        retain_head=False, 
-    )
+    
     adaptor_ckpt = get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb)
     adaptor = Adaptor.load_from_checkpoint(adaptor_ckpt)
+    print('Loaded adaptor from checkpoint')
     
-    model = AdaptorFinetuner(
-       backbone=backbone,
+    if args.vision_model == 'resnet-ae':
+        seg_model = ResNetAEUNet(
+            adaptor=adaptor,
+            pretrained=False, 
+            out_channels=1, 
+            freeze_adaptor=True,
+        )
+    
+    elif args.vision_model.startswith('dinov2-'):
+        backbone = load_vision_model(
+            vision_model_type=vision_model_type, 
+            vision_pretrained=vision_pretrained,
+            retain_head=False, 
+        )
+        seg_model = DINOv2Segmenter(
+            backbone=backbone,
+            adaptor=adaptor,
+            hidden_dim=adaptor.projection_dim,
+            out_channels=1,
+            features=[512, 256, 128, 64], 
+            freeze_adaptor=True,
+        )
+    else:
+        raise NotImplementedError
+    
+    model = AdaptorSegmenter(
+       seg_model=seg_model,
        adaptor=adaptor,
-       model_name=args.vision_model,
-       in_features=adaptor.projection_dim, 
-       num_classes=dataset_cfg['num_classes'],
-       num_layers=args.num_layers,
-       hidden_dim=args.hidden_dim,
-       dropout=args.dropout,
        learning_rate=args.lr,
        weight_decay=args.weight_decay,      
-       binary=dataset_cfg['binary'],
-       freeze_adaptor=not args.unfreeze_adaptor,
     )
-    # model = AdaptorPipelineWithClassificationHead(
-    #     text_model=args.text_model, 
-    #     vision_model=args.vision_model, 
-    #     adaptor_ckpt=get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb), 
-    #     num_classes=dataset_cfg['num_classes'], 
-    #     lr=args.lr, 
-    # )
-    # if not args.unfreeze_adaptor:
-    #     freeze_adaptor(model)
     
     seed_everything(args.seed, workers=True)
     
-    callbacks = [
-        StreamingProgressBar(total=data_module.train_steps, val_total=data_module.val_steps), 
-    ]
+    callbacks = [StreamingProgressBar(total=data_module.train_steps, 
+                                      val_total=data_module.val_steps)]
     
     if args.wandb:
         wandb.login(key='b0236e7bef7b6a3789ca4f305406ab358812da3d')
         # now = datetime.datetime.now(tz.tzlocal())
         # extension = now.strftime("%Y_%m_%d_%H_%M_%S")
+        if not args.project_name:
+            args.project_name = 'adaptor_segmentation'
         logger = WandbLogger(
-            project=f"adaptor_finetune_{args.dataset}", 
+            project=f"{args.project_name}_{args.dataset}", 
             save_dir=args.output_dir, 
             job_type="train", 
             name=f"{args.vision_model}_{args.text_model}_{args.dataset}_{args.data_pct}",
@@ -111,9 +123,9 @@ def main(args):
         experiment_dir = logger.experiment.dir
         callbacks += [
             cb.LearningRateMonitor(logging_interval='step'), 
-            cb.ModelCheckpoint(monitor=f"train_{model.metric_name}_step", mode="max"), 
+            cb.ModelCheckpoint(monitor=f"train_{model.metric_name}", mode="max"), 
             cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"), 
-            cb.EarlyStopping(monitor=f"val_loss", min_delta=0., patience=10//args.check_val_every_n_epochs, verbose=False, mode="min")
+            cb.EarlyStopping(monitor=f"val_loss", min_delta=0., patience=10, verbose=False, mode="min")
         ]
     else:
         logger = CSVLogger(args.output_dir)
@@ -126,7 +138,7 @@ def main(args):
     trainer = Trainer(
         max_epochs=args.num_train_epochs,
         log_every_n_steps=args.log_every_n_steps, 
-        check_val_every_n_epoch=args.check_val_every_n_epochs,
+        check_val_every_n_epoch=1, 
         default_root_dir=args.output_dir,
         callbacks=callbacks,
         enable_progress_bar=False, 
@@ -144,10 +156,6 @@ def main(args):
 if __name__ == '__main__':
     parser = get_train_parser()
     parser.add_argument('--dataset', type=str, required=True, help="Choose between 'covidx' and 'rsna'")
-    parser.add_argument('--unfreeze_adaptor', action='store_true')
-    parser.add_argument('--hidden_dim', type=int, default=512, help="Hidden dimension of the classification head")
-    parser.add_argument('--dropout', type=float, default=0.1, help="Dropout rate of the classification head")
-    parser.add_argument('--check_val_every_n_epochs', type=int, default=2, help="Check validation every n epochs")
     args = parser.parse_args()
 
     print('Number of GPUs available:', torch.cuda.device_count())

@@ -6,6 +6,9 @@ import torch.nn.functional as F
 from pytorch_lightning import LightningModule
 from torchmetrics import AUROC, Accuracy
 
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+
 
 class AdaptorFinetuner(LightningModule):
     def __init__(
@@ -19,6 +22,7 @@ class AdaptorFinetuner(LightningModule):
         dropout:float=0.0,
         learning_rate:float=5e-4,
         weight_decay:float=1e-6,
+        binary:bool=True,
         multilabel:bool=True,
         freeze_adaptor:bool=True,
         *args,
@@ -28,10 +32,11 @@ class AdaptorFinetuner(LightningModule):
         
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
-        if multilabel:
-            self.train_auc = AUROC(task='multilabel', num_classes=num_classes)
-            self.val_auc = AUROC(task='multilabel', num_classes=num_classes, compute_on_step=False)
-            self.test_auc = AUROC(task='multilabel', num_classes=num_classes, compute_on_step=False)
+        if binary:
+            assert num_classes == 1
+            self.train_auc = AUROC(task='binary')
+            self.val_auc = AUROC(task='binary', compute_on_step=False)
+            self.test_auc = AUROC(task='binary', compute_on_step=False)
             self.metric_name = 'auroc'
         else:
             self.train_acc = Accuracy(task='multiclass', num_classes=num_classes, topk=1)
@@ -49,6 +54,7 @@ class AdaptorFinetuner(LightningModule):
             for param in self.adaptor.parameters():
                 param.requires_grad = False
         self.model_name = model_name
+        self.binary = binary
         self.multilabel = multilabel
 
         self.linear_layer = SSLEvaluator(
@@ -62,8 +68,6 @@ class AdaptorFinetuner(LightningModule):
         self.backbone.eval()
         self.adaptor.eval()
     
-    def training_step(self, batch, batch_idx):
-        loss, 
     
     def training_step(self, batch, batch_idx):
         loss, logits, y = self.shared_step(batch)
@@ -125,13 +129,24 @@ class AdaptorFinetuner(LightningModule):
 
         return loss, logits, y
 
+    # def configure_optimizers(self):
+    #     optimizer = torch.optim.AdamW(
+    #         self.linear_layer.parameters(),
+    #         lr=self.learning_rate,
+    #         betas=(0.9, 0.999),
+    #         weight_decay=self.weight_decay
+    #     )
+    
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(
-            self.linear_layer.parameters(),
-            lr=self.learning_rate,
-            betas=(0.9, 0.999),
-            weight_decay=self.weight_decay
+        optimizer = AdamW(self.linear_layer.parameters(), lr=self.learning_rate, 
+                          weight_decay=self.weight_decay)
+        lr_schedule = CosineAnnealingWarmRestarts(
+            optimizer=optimizer, 
+            T_0=int(self.training_steps*0.4), 
+            T_mult=1, 
+            eta_min=1e-8, 
         )
+        return {'optimizer':optimizer, 'lr_scheduler':lr_schedule}
         
         # lr_scheduler = CosineAnnealingWarmupRestarts(
         #     optimizer,

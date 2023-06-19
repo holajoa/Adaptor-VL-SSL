@@ -1,5 +1,4 @@
-from mgca.datasets.transforms import DataTransforms
-from utils.dataset_utils import AutoEncoderDataTransforms
+from utils.dataset_utils import DataTransforms, AutoEncoderDataTransforms
 
 
 CACHE_DIR = '/vol/bitbucket/jq619/.cache/huggingface/'

@@ -35,6 +35,28 @@ def get_dataloader(
         num_workers=num_workers, 
         drop_last=drop_last,
     )
+
+
+class DataTransforms(object):
+    """Copied from MGCA/mgca/datasets/transforms.py"""
+    def __init__(self, is_train: bool = True, crop_size: int = 224):
+        if is_train:
+            data_transforms = [
+                transforms.RandomCrop(crop_size),
+                transforms.ToTensor(),
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5,  0.5, 0.5))
+            ]
+        else:
+            data_transforms = [
+                transforms.CenterCrop(crop_size),
+                transforms.ToTensor(),
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            ]
+
+        self.data_transforms = transforms.Compose(data_transforms)
+
+    def __call__(self, image):
+        return self.data_transforms(image)
     
 
 class AutoEncoderDataTransforms(object):

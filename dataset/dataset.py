@@ -23,6 +23,7 @@ from nltk.tokenize import RegexpTokenizer
 import re
 
 
+
 class MultimodalDataset(torch.utils.data.Dataset):
     def __init__(self, 
                  split='train', 
@@ -268,4 +269,15 @@ def clf_collator(batch):
     return {
         'pixel_values':torch.stack(pixel_values, dim=0), 
         'labels':torch.vstack(labels), 
+    }
+
+def seg_collator(batch):
+    pixel_values = []
+    labels = []
+    for sample in batch:
+        pixel_values.append(sample[0])
+        labels.append(sample[1])
+    return {
+        'image':torch.stack(pixel_values, dim=0), 
+        'mask':torch.stack(labels, dim=0), 
     }

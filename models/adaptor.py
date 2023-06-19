@@ -2,7 +2,7 @@ from typing import List, Union, Tuple, Dict, Optional
 
 import torch
 import torch.nn as nn
-from torch.nn.modules.transformer import _get_activation_fn
+import torch.nn.functional as F
 
 from pytorch_lightning import LightningModule
 
@@ -11,8 +11,7 @@ from transformers.models.bert.modeling_bert import BertEncoder, BertPooler
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 from transformers.modeling_utils import ModuleUtilsMixin
-from transformers.models.clip.modeling_clip import CLIPOutput
-from transformers.models.clip.modeling_clip import clip_loss
+from transformers.models.clip.modeling_clip import CLIPOutput, clip_loss
 
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
@@ -20,6 +19,13 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from tqdm import tqdm
 import sys
 
+
+def _get_activation_fn(activation: str):
+    if activation == "relu":
+        return F.relu
+    elif activation == "gelu":
+        return F.gelu
+    raise RuntimeError("activation should be relu/gelu, not {}".format(activation))
 
 class TransformerEncoderLayerWithCrossAttention(nn.Module):
     r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
@@ -100,7 +106,6 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
             )
         else:
             self.encoder = TransformerEncoderLayerWithCrossAttention(embed_dim, num_heads)
-
 
     def forward(
         self,
