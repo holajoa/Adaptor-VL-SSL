@@ -15,6 +15,8 @@ from utils.args import get_train_parser
 from utils.model_utils import load_vision_model
 
 import wandb
+import optuna
+from optuna.integration import WeightsAndBiasesCallback
 
 
 def main(args):
@@ -80,15 +82,6 @@ def main(args):
        binary=dataset_cfg['binary'],
        freeze_adaptor=not args.unfreeze_adaptor,
     )
-    # model = AdaptorPipelineWithClassificationHead(
-    #     text_model=args.text_model, 
-    #     vision_model=args.vision_model, 
-    #     adaptor_ckpt=get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb), 
-    #     num_classes=dataset_cfg['num_classes'], 
-    #     lr=args.lr, 
-    # )
-    # if not args.unfreeze_adaptor:
-    #     freeze_adaptor(model)
     
     seed_everything(args.seed, workers=True)
     
@@ -113,7 +106,7 @@ def main(args):
         experiment_dir = logger.experiment.dir
         callbacks += [
             cb.LearningRateMonitor(logging_interval='step'), 
-            cb.ModelCheckpoint(monitor=f"train_{model.metric_name}_step", mode="max", every_n_train_steps=10), 
+            cb.ModelCheckpoint(monitor=f"train_{model.metric_name}_step", mode="max"), 
             cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"), 
             cb.EarlyStopping(monitor=f"val_loss", min_delta=0., patience=10//args.check_val_every_n_epochs, verbose=False, mode="min")
         ]
@@ -127,7 +120,6 @@ def main(args):
         
     trainer = Trainer(
         max_epochs=args.num_train_epochs,
-        min_epochs=int(args.num_train_epochs*0.4),
         log_every_n_steps=args.log_every_n_steps, 
         check_val_every_n_epoch=args.check_val_every_n_epochs,
         default_root_dir=args.output_dir,
@@ -141,9 +133,23 @@ def main(args):
     model.validation_steps = args.val_steps
     
     trainer.fit(model, datamodule=data_module)
-    trainer.test(model, datamodule=data_module, ckpt_path='best')
-    
-  
+    test_output = trainer.test(model, datamodule=data_module, ckpt_path='best')
+
+    return test_output
+
+
+def objective(trial):
+    args.lr = trial.suggest_loguniform("lr", 1e-5, 1e-3)
+    args.batch_size = trial.suggest_categorical("batch_size", [4, 8, 16])
+    args.weight_decay = trial.suggest_loguniform("weight_decay", 1e-10, 1e-3)
+
+    # ... Everything else stays the same in your main function
+    test_output = main(args)
+    test_auroc = test_output[0]['test_auroc']
+
+    return test_auroc
+
+
 if __name__ == '__main__':
     parser = get_train_parser()
     parser.add_argument('--dataset', type=str, required=True, help="Choose between 'covidx' and 'rsna'")
@@ -151,8 +157,26 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_dim', type=int, default=512, help="Hidden dimension of the classification head")
     parser.add_argument('--dropout', type=float, default=0.1, help="Dropout rate of the classification head")
     parser.add_argument('--check_val_every_n_epochs', type=int, default=2, help="Check validation every n epochs")
-    args = parser.parse_args()
 
+    args = parser.parse_args()
     print('Number of GPUs available:', torch.cuda.device_count())
-    main(args)
     
+    wandb.init(project=f"{args.project_name}_optuna_integration", entity="holajoa", 
+               name=f"{args.vision_model}_{args.text_model}_{args.dataset}_{args.data_pct}_{args.batch_size}_{args.lr}_{args.weight_decay}")
+
+    study = optuna.create_study(direction='maximize', 
+                                study_name='optuna-wandb-experiment',
+                                # storage='sqlite:///example.db',
+                                load_if_exists=True)
+
+    # Add Weights & Biases callback here:
+    wandb_callback = WeightsAndBiasesCallback(metric_name='test_auroc')
+    study.optimize(objective, n_trials=50, callbacks=[wandb_callback])
+    
+    best_trial = study.best_trial
+
+    print('Best trial:')
+    print(' Value: ', best_trial.value)
+    print(' Params: ')
+    for key, value in best_trial.params.items():
+        print(f'    {key}: {value}')
