@@ -16,21 +16,21 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class AdaptorSegmenter(LightningModule):
     def __init__(
-        self, 
+        self,
         seg_model: nn.Module,
         learning_rate: float = 5e-4,
         weight_decay: float = 1e-6,
-        *args, 
-        **kwargs
+        *args,
+        **kwargs,
     ):
         super().__init__()
-        self.save_hyperparameters(ignore=['seg_model'])
+        self.save_hyperparameters(ignore=["seg_model"])
         self.model = seg_model
         self.loss = MixedLoss(alpha=10)
-        self.metric_name = 'dice'
+        self.metric_name = "dice"
 
     def shared_step(self, batch, batch_idx, split):
-        x, y = batch['image'], batch['mask']
+        x, y = batch["image"], batch["mask"]
         logit = self.model(x, return_dict=False)
         logit = logit.squeeze(dim=1)
         loss = self.loss(logit, y)
@@ -47,16 +47,16 @@ class AdaptorSegmenter(LightningModule):
         #     mask = mask.transpose((1, 2, 0))
         #     layered = layered.transpose((1, 2, 0))
 
-            # self.logger.experiment.log(
-            #     {"input_image": [wandb.Image(img, caption="input_image")]}
-            # )
-            # self.logger.experiment.log(
-            #     {"mask": [wandb.Image(mask, caption="mask")]})
-            # self.logger.experiment.log(
-            #     {"layered": [wandb.Image(layered, caption="layered")]}
-            # )
-            # self.logger.experiment.log(
-            #     {"pred": [wandb.Image(prob[0], caption="pred")]})
+        # self.logger.experiment.log(
+        #     {"input_image": [wandb.Image(img, caption="input_image")]}
+        # )
+        # self.logger.experiment.log(
+        #     {"mask": [wandb.Image(mask, caption="mask")]})
+        # self.logger.experiment.log(
+        #     {"layered": [wandb.Image(layered, caption="layered")]}
+        # )
+        # self.logger.experiment.log(
+        #     {"pred": [wandb.Image(prob[0], caption="pred")]})
 
         # log_iter_loss = True if split == 'train' else False
         self.log(
@@ -85,8 +85,7 @@ class AdaptorSegmenter(LightningModule):
         loss = np.array(loss).mean()
         dice = np.array(dice).mean()
 
-        self.log(f"{split}_dice", dice, on_epoch=True,
-                 logger=True, prog_bar=True)
+        self.log(f"{split}_dice", dice, on_epoch=True, logger=True, prog_bar=True)
 
     def training_epoch_end(self, training_step_outputs):
         return self.shared_epoch_end(training_step_outputs, "train")
@@ -126,7 +125,7 @@ class AdaptorSegmenter(LightningModule):
             self.model.parameters(),
             lr=self.hparams.learning_rate,
             betas=(0.9, 0.999),
-            weight_decay=self.hparams.weight_decay
+            weight_decay=self.hparams.weight_decay,
         )
 
         return optimizer

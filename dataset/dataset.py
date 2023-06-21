@@ -1,6 +1,6 @@
 from mgca.datasets.pretrain_dataset import (
-    multimodal_collate_fn, 
-    BASE_DIR, 
+    multimodal_collate_fn,
+    BASE_DIR,
 )
 from mgca.constants import *
 from mgca.datasets.utils import get_imgs
@@ -8,7 +8,7 @@ from mgca.datasets.utils import get_imgs
 from transformers import BertTokenizer
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 
-import torch 
+import torch
 
 import os
 from pathlib import Path
@@ -23,32 +23,33 @@ from nltk.tokenize import RegexpTokenizer
 import re
 
 
-
 class MultimodalDataset(torch.utils.data.Dataset):
-    def __init__(self, 
-                 split='train', 
-                 transform=None, 
-                 data_pct=1.0, 
-                 imsize=256, 
-                 tokenizer=None,
-                 max_words=112,
-                 validate_path=True):
+    def __init__(
+        self,
+        split="train",
+        transform=None,
+        data_pct=1.0,
+        imsize=256,
+        tokenizer=None,
+        max_words=112,
+        validate_path=True,
+    ):
         super().__init__()
         if not os.path.exists(MIMIC_CXR_DATA_DIR):
             raise RuntimeError(f"{MIMIC_CXR_DATA_DIR} does not exist!")
-        
+
         self.split = split
         self.transform = transform
         self.imsize = imsize
         self.df = None
         self.max_words = max_words
         self.validate_path = validate_path
-        
+
         if isinstance(tokenizer, str):
             self.tokenizer = BertTokenizer.from_pretrained(tokenizer)
         elif isinstance(tokenizer, PreTrainedTokenizerBase):
             self.tokenizer = tokenizer
-        
+
     def load_text_data(self):
         # get study to captions mapping
         # TODO: check this
@@ -62,7 +63,7 @@ class MultimodalDataset(torch.utils.data.Dataset):
         else:
             with open(filepath, "rb") as f:
                 path2sent = pickle.load(f)
-    
+
         # filter studies to use for current split
         filenames = []
         total = len(self.df)
@@ -71,7 +72,7 @@ class MultimodalDataset(torch.utils.data.Dataset):
             for row in self.df.itertuples():
                 cur_split = getattr(row, MIMIC_CXR_SPLIT_COL)
                 path = getattr(row, MIMIC_CXR_PATH_COL)
-                
+
                 if cur_split == self.split and path in path2sent:
                     ### Addition: make sure path points to an existing file ==========
                     if self.validate_path and not Path(path).is_file():
@@ -79,10 +80,10 @@ class MultimodalDataset(torch.utils.data.Dataset):
                         continue
                     ### End addition =================================================
                     filenames.append(path)
-                
+
                 pbar.update(1)
         return filenames, path2sent, removed_indices
-    
+
     def create_path_2_sent_mapping(self):
         sent_lens, num_sents = [], []
         path2sent = {}
@@ -148,7 +149,7 @@ class MultimodalDataset(torch.utils.data.Dataset):
         )
 
         return path2sent
-    
+
     def get_caption(self, path):
         series_sents = self.path2sent[path]
 
@@ -169,70 +170,87 @@ class MultimodalDataset(torch.utils.data.Dataset):
         x_len = len([t for t in tokens["input_ids"][0] if t != 0])
 
         return tokens, x_len
-    
+
     def __get__(self, index):
         raise NotImplementedError
-    
+
     def __len__(self):
         raise NotImplementedError
-    
+
 
 class MultimodalPretrainingDatasetForAdaptor(MultimodalDataset):
-    def __init__(self, 
-                 split='train', 
-                 transform=None, 
-                 data_pct=1.0, 
-                 imsize=256, 
-                 tokenizer=None,
-                 max_words=112, 
-                 validate_path=True):
-        super().__init__(split=split, transform=transform, data_pct=data_pct, 
-                         imsize=imsize, tokenizer=tokenizer, max_words=max_words, 
-                         validate_path=validate_path)
-        
+    def __init__(
+        self,
+        split="train",
+        transform=None,
+        data_pct=1.0,
+        imsize=256,
+        tokenizer=None,
+        max_words=112,
+        validate_path=True,
+    ):
+        super().__init__(
+            split=split,
+            transform=transform,
+            data_pct=data_pct,
+            imsize=imsize,
+            tokenizer=tokenizer,
+            max_words=max_words,
+            validate_path=validate_path,
+        )
+
         self.df = read_csv(MIMIC_CXR_MASTER_CSV)
         self.df = self.df[self.df[MIMIC_CXR_VIEW_COL].isin(["PA", "AP"])]
         self.df[MIMIC_CXR_PATH_COL] = self.df[MIMIC_CXR_PATH_COL].apply(
-            lambda x: os.path.join(MIMIC_CXR_DATA_DIR, "/".join(x.split("/")[1:])))
+            lambda x: os.path.join(MIMIC_CXR_DATA_DIR, "/".join(x.split("/")[1:]))
+        )
 
         # load studies and study to text mapping
         self.filenames, self.path2sent, removed_indices = self.load_text_data()
-        self.df.drop(removed_indices, axis=0, inplace=True)  # remove rows where image file path does not exist
-        
+        self.df.drop(
+            removed_indices, axis=0, inplace=True
+        )  # remove rows where image file path does not exist
+
         self.df = self.df[self.df[MIMIC_CXR_SPLIT_COL] == split]
         if data_pct != 1.0 and split == "train":
             self.df = self.df.sample(frac=data_pct, random_state=42)
         self.df.reset_index(drop=True, inplace=True)
-        self.df.dicom_id.to_csv(f'{MIMIC_CXR_DATA_DIR}/mimic-cxr-2.0.0_idx2dicom_id_{split}.csv')
-        
+        self.df.dicom_id.to_csv(
+            f"{MIMIC_CXR_DATA_DIR}/mimic-cxr-2.0.0_idx2dicom_id_{split}.csv"
+        )
+
     def __getitem__(self, index):
         key = self.filenames[index]
         caps, cap_len = self.get_caption(key)
         imgs = get_imgs(key, self.imsize, self.transform, multiscale=False)
         return imgs, caps, cap_len, key
-    
+
     def __len__(self):
         return len(self.filenames)
 
-    
+
 class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
     def __init__(
-        self, 
+        self,
         text_model_name: str,
         image_model_name: str,
-        split: str='train',
-        device='cpu',
-        num_of_samples=-1, 
-        shuffle=False, 
-        seed=42, 
+        split: str = "train",
+        device="cpu",
+        num_of_samples=-1,
+        shuffle=False,
+        seed=42,
     ):
         super().__init__()
-        self.text_embeds_raw_dir = f'saved_embeddings/text_embeds/{text_model_name}_{split}.npy'
-        self.image_embeds_raw_dir = f'saved_embeddings/image_embeds/{image_model_name}_{split}.npy'
-        
-        self.image_embeds = np.load(self.image_embeds_raw_dir, mmap_mode='r')
-        self.text_embeds = np.load(self.text_embeds_raw_dir, mmap_mode='r')
-        
+        self.text_embeds_raw_dir = (
+            f"saved_embeddings/text_embeds/{text_model_name}_{split}.npy"
+        )
+        self.image_embeds_raw_dir = (
+            f"saved_embeddings/image_embeds/{image_model_name}_{split}.npy"
+        )
+
+        self.image_embeds = np.load(self.image_embeds_raw_dir, mmap_mode="r")
+        self.text_embeds = np.load(self.text_embeds_raw_dir, mmap_mode="r")
+
         self.device = torch.device(device)
         if num_of_samples > 0:
             self.indices = self.indices[:num_of_samples]
@@ -240,14 +258,14 @@ class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
             num_of_samples = len(self.image_embeds)
         self.num_of_samples = num_of_samples
         self.indices = np.arange(self.num_of_samples)
-        if shuffle and split == 'train':
+        if shuffle and split == "train":
             np.random.seed(seed)
             np.random.shuffle(self.indices)
-        
+
     def __getitem__(self, idx):
         text_tensor = self.text_embeds[self.indices[idx]]
         image_tensor = self.image_embeds[self.indices[idx]]
-        return {'text_embeds_raw':text_tensor, 'image_embeds_raw':image_tensor}
+        return {"text_embeds_raw": text_tensor, "image_embeds_raw": image_tensor}
 
     def __len__(self):
         return len(self.indices)
@@ -255,10 +273,11 @@ class MultimodalPretrainedEmbeddingsDataset(torch.utils.data.Dataset):
 
 def multimodal_collator(*args, **kwargs):
     d = multimodal_collate_fn(*args, **kwargs)
-    d['input_ids'] = d.pop('caption_ids')
-    d['pixel_values'] = d.pop('imgs')
-    d['return_loss'] = True
+    d["input_ids"] = d.pop("caption_ids")
+    d["pixel_values"] = d.pop("imgs")
+    d["return_loss"] = True
     return d
+
 
 def clf_collator(batch):
     pixel_values = []
@@ -267,9 +286,10 @@ def clf_collator(batch):
         pixel_values.append(sample[0])
         labels.append(sample[1])
     return {
-        'pixel_values':torch.stack(pixel_values, dim=0), 
-        'labels':torch.vstack(labels), 
+        "pixel_values": torch.stack(pixel_values, dim=0),
+        "labels": torch.vstack(labels),
     }
+
 
 def seg_collator(batch):
     pixel_values = []
@@ -278,6 +298,6 @@ def seg_collator(batch):
         pixel_values.append(sample[0])
         labels.append(sample[1])
     return {
-        'image':torch.stack(pixel_values, dim=0), 
-        'mask':torch.stack(labels, dim=0), 
+        "image": torch.stack(pixel_values, dim=0),
+        "mask": torch.stack(labels, dim=0),
     }
