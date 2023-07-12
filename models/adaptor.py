@@ -13,6 +13,8 @@ from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.modeling_utils import ModuleUtilsMixin
 from transformers.models.clip.modeling_clip import CLIPOutput, clip_loss
 
+from transformers.optimization import get_linear_schedule_with_warmup
+
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
@@ -142,7 +144,7 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
             assert (
                 text_embeds.device == image_embeds.device
             ), "text and image embeddings must be on the same device"
-            ## TODO: Run through cross-attention
+            ## Run through cross-attention
             for layer in encoder_layers:
                 image_embeds = layer(
                     src=image_embeds, query=text_embeds, run_cross_attn=True
@@ -152,7 +154,7 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
                 )
             return image_embeds, text_embeds
         else:
-            ## TODO: Run through self-attention
+            ## Run through self-attention if no text embedding is inputed - downstream task.
             for layer in encoder_layers:
                 image_embeds = layer(src=image_embeds, run_cross_attn=False)
             return image_embeds
@@ -202,7 +204,7 @@ class Adaptor(LightningModule):
         ] = None,  # ignored if vision_model_type is huggingface
         logit_scale_init_value: float = 2.6592,  # logit_scale = 1 / temperature
         projection_dim: int = 512,
-        # num_hidden_layers:int=2,
+        num_layers: int = 1,
         lr: float = 1e-4,
     ):
         super(Adaptor, self).__init__()
@@ -212,7 +214,9 @@ class Adaptor(LightningModule):
             vision_embed_dim=vision_output_dim,
             projection_dim=projection_dim,
         )
-        self.adaptor_module = AdaptorModule(embed_dim=projection_dim)
+        self.adaptor_module = AdaptorModule(
+            embed_dim=projection_dim, num_layers=num_layers
+        )
         self.vision_output_dim = vision_output_dim
         self.text_output_dim = text_output_dim
         self.projection_dim = projection_dim
@@ -280,11 +284,11 @@ class Adaptor(LightningModule):
                 logits_per_text=logits_per_text,
                 text_embeds=text_embeds,
                 image_embeds=image_embeds,
-                text_model_outputs=BaseModelOutputWithPooling(
+                text_model_output=BaseModelOutputWithPooling(
                     last_hidden_state=text_embeds_full,
                     pooler_output=text_embeds,
                 ),
-                image_model_outputs=BaseModelOutputWithPooling(
+                vision_model_output=BaseModelOutputWithPooling(
                     last_hidden_state=image_embeds_full,
                     pooler_output=image_embeds,
                 ),
@@ -318,12 +322,17 @@ class Adaptor(LightningModule):
         self._shared_eval(batch, batch_idx, "test")
 
     def configure_optimizers(self):
-        optimizer = AdamW(self.parameters(), lr=self.lr, weight_decay=0.05)
-        lr_schedule = CosineAnnealingWarmRestarts(
-            optimizer=optimizer,
-            T_0=int(self.training_steps * 0.4),
-            T_mult=1,
-            eta_min=1e-8,
+        optimizer = AdamW(self.parameters(), lr=self.lr, weight_decay=0.01)
+        # lr_schedule = CosineAnnealingWarmRestarts(
+        #     optimizer=optimizer,
+        #     T_0=int(self.training_steps * 0.4),
+        #     T_mult=0.5,
+        #     eta_min=1e-8,
+        # )
+        lr_schedule = get_linear_schedule_with_warmup(
+            optimizer=optimizer,    
+            num_warmup_steps=int(self.training_steps * .02),
+            num_training_steps=self.training_steps,
         )
         return {"optimizer": optimizer, "lr_scheduler": lr_schedule}
 

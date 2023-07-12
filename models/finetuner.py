@@ -32,6 +32,7 @@ class AdaptorFinetuner(LightningModule):
 
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
+        self.num_classes = num_classes
         if binary:
             assert num_classes == 1
             self.train_auc = AUROC(task="binary")
@@ -151,6 +152,7 @@ class AdaptorFinetuner(LightningModule):
         if self.multilabel:
             loss = F.binary_cross_entropy_with_logits(logits.float(), y.float())
         else:
+            # y = F.one_hot(y, num_classes=self.num_classes)
             y = y.squeeze()
             loss = F.cross_entropy(logits.float(), y.long())
 

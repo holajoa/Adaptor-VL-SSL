@@ -13,7 +13,7 @@ export SAVED_MODEL_DIR="/vol/bitbucket/jq619/individual-project/trained_models/s
 export DATASET="rsna"
 for DATA_PCT in 0.01 0.1 1.0
 do
-    for VISION_MODEL in "dinov2-b" "dinov2-s" "resnet-ae" 
+    for VISION_MODEL in "dinov2-b" "dinov2-s" "resnet-ae"
     do
         for TEXT_MODEL in "clinicalbert" "bert" "biobert" "pubmedbert" "cxrbert"
         do

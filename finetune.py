@@ -18,6 +18,8 @@ import wandb
 
 
 def main(args):
+    seed_everything(args.seed, workers=True)
+    
     if args.vision_model not in VISION_PRETRAINED.keys():
         raise ValueError(
             f"Vision model {args.vision_model} not available."
@@ -67,9 +69,10 @@ def main(args):
         vision_pretrained=vision_pretrained,
         retain_head=False,
     )
-    adaptor_ckpt = get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb)
+    adaptor_ckpt = get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb, 
+                                   postfix=args.postfix, project_name=args.pretrain_wandb_project_name)
     adaptor = Adaptor.load_from_checkpoint(adaptor_ckpt)
-
+    
     model = AdaptorFinetuner(
         backbone=backbone,
         adaptor=adaptor,
@@ -82,6 +85,7 @@ def main(args):
         learning_rate=args.lr,
         weight_decay=args.weight_decay,
         binary=dataset_cfg["binary"],
+        multilabel=dataset_cfg["multilabel"],
         freeze_adaptor=not args.unfreeze_adaptor,
     )
     # model = AdaptorPipelineWithClassificationHead(
@@ -93,8 +97,6 @@ def main(args):
     # )
     # if not args.unfreeze_adaptor:
     #     freeze_adaptor(model)
-
-    seed_everything(args.seed, workers=True)
 
     callbacks = [
         StreamingProgressBar(
@@ -119,18 +121,18 @@ def main(args):
         experiment_dir = logger.experiment.dir
         callbacks += [
             cb.LearningRateMonitor(logging_interval="step"),
-            cb.ModelCheckpoint(
-                monitor=f"train_{model.metric_name}_step",
-                mode="max",
-                every_n_train_steps=10,
-            ),
+            # cb.ModelCheckpoint(
+            #     monitor=f"train_{model.metric_name}_step",
+            #     mode="max",
+            #     every_n_train_steps=10,
+            # ),
             cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"),
             cb.EarlyStopping(
-                monitor=f"val_loss",
-                min_delta=0.0,
+                monitor=f"val_{model.metric_name}",
+                min_delta=1e-5,
                 patience=10 // args.check_val_every_n_epochs,
                 verbose=False,
-                mode="min",
+                mode="max",
             ),
         ]
     else:
@@ -148,7 +150,7 @@ def main(args):
 
     trainer = Trainer(
         max_epochs=args.num_train_epochs,
-        min_epochs=int(args.num_train_epochs * 0.4),
+        min_epochs=int(args.num_train_epochs * 0.1),
         log_every_n_steps=args.log_every_n_steps,
         check_val_every_n_epoch=args.check_val_every_n_epochs,
         default_root_dir=args.output_dir,
@@ -156,6 +158,7 @@ def main(args):
         enable_progress_bar=False,
         logger=logger,
         deterministic=True,
+        # enable_checkpointing=False,
         **device_kwargs,
     )
     model.training_steps = args.max_steps
@@ -189,6 +192,9 @@ if __name__ == "__main__":
         default=2,
         help="Check validation every n epochs",
     )
+    parser.add_argument("--sweep", action="store_true")
+    parser.add_argument("--postfix", type=str, default="")
+    parser.add_argument("--pretrain_wandb_project_name", type=str, default="adaptor pretrain")
     args = parser.parse_args()
 
     print("Number of GPUs available:", torch.cuda.device_count())

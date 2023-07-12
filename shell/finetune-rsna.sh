@@ -11,10 +11,10 @@ export WANDB_DIR=/vol/bitbucket/jq619/
 export WANDB_DATA_DIR=/vol/bitbucket/jq619/wandb/
 export SAVED_MODEL_DIR="/vol/bitbucket/jq619/individual-project/trained_models/clf"
 export DATASET="rsna"
-export DATA_PCT=0.1
+export DATA_PCT=1.0
 export LR=1e-5
-export WD=1e-8
-export BATCH_SIZE=32
+export WD=1e-5
+export BATCH_SIZE=128
 for VISION_MODEL in "dinov2-s" "dinov2-b" "resnet-ae"
 do
     for TEXT_MODEL in "bert" "clinicalbert" "biobert" "pubmedbert" "cxrbert"

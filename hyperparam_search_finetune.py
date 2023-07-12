@@ -156,9 +156,12 @@ def main(args):
 
 
 def objective(trial):
-    args.lr = trial.suggest_loguniform("lr", 1e-5, 1e-3)
-    args.batch_size = trial.suggest_categorical("batch_size", [4, 8, 16])
-    args.weight_decay = trial.suggest_loguniform("weight_decay", 1e-10, 1e-3)
+    args.lr = trial.suggest_loguniform("lr", 1e-6, 5e-5)
+    args.batch_size = trial.suggest_categorical("batch_size", [32, 64, 100])
+    args.weight_decay = trial.suggest_loguniform("weight_decay", 1e-10, 1e-5)
+    args.projection_dim = trial.suggest_categorical(
+        "projection_dim", [256, 512, 768, 1024]
+    )
 
     # ... Everything else stays the same in your main function
     test_output = main(args)

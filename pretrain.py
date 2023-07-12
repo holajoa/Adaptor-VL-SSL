@@ -16,6 +16,7 @@ import wandb
 
 
 def main(args):
+    seed_everything(args.seed, workers=True)
     if args.vision_model not in VISION_PRETRAINED.keys():
         raise ValueError(
             f"Vision model {args.vision_model} not available."
@@ -38,7 +39,7 @@ def main(args):
     model = Adaptor(
         vision_output_dim=args.vision_output_dim,
         projection_dim=args.projection_dim,
-        # num_hidden_layers=args.num_hidden_layers,
+        num_layers=args.num_layers,
         lr=args.lr,
     )
 
@@ -89,16 +90,15 @@ def main(args):
     )
 
     ### Training
-    seed_everything(args.seed)
+    # seed_everything(args.seed)
     callbacks = [
         StreamingProgressBar(
             total=args.max_steps // args.num_train_epochs, val_total=args.val_steps
-        )
-    ]
+        ), ]
     if args.wandb:
         wandb.login(key="b0236e7bef7b6a3789ca4f305406ab358812da3d")
         logger = WandbLogger(
-            project="adaptor pretrain",
+            project=f"adaptor_pretrain_{args.num_layers}_layers",
             name=f"{args.vision_model}_{args.text_model}_{args.data_pct}",
             log_model="all",
             save_dir=args.output_dir,
@@ -107,7 +107,11 @@ def main(args):
         logger.watch(model, log_freq=max(100, args.log_every_n_steps))
         logger.log_hyperparams(vars(args))
         experiment_dir = logger.experiment.dir
-        callbacks += [cb.LearningRateMonitor()]
+        callbacks += [
+            cb.LearningRateMonitor(logging_interval="step"),               
+            cb.ModelCheckpoint(monitor=f"val_loss", mode="min"),
+            cb.EarlyStopping(monitor="val_loss", patience=10, min_delta=1e-5, mode="min"),
+        ]
     else:
         logger = CSVLogger(args.output_dir)
 
