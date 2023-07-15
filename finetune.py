@@ -77,6 +77,7 @@ def main(args):
         backbone=backbone,
         adaptor=adaptor,
         model_name=args.vision_model,
+        text_model_name=args.text_model,
         in_features=adaptor.projection_dim,
         num_classes=dataset_cfg["num_classes"],
         num_layers=args.num_layers,

@@ -9,12 +9,15 @@ from torchmetrics import AUROC, Accuracy
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
+import os
+
 
 class AdaptorFinetuner(LightningModule):
     def __init__(
         self,
         backbone: nn.Module,
         model_name: str,
+        text_model_name: Optional[str],
         adaptor: Union[nn.Module, LightningModule],
         in_features: int = 2048,
         num_classes: int = 5,
@@ -67,6 +70,10 @@ class AdaptorFinetuner(LightningModule):
             for param in self.adaptor.parameters():
                 param.requires_grad = False
         self.model_name = model_name
+        self.text_model_name = text_model_name
+        if self.text_model_name is not None:
+            store_path = "/vol/bitbucket/jq619/individual-project/saved_embeddings/dummy_text_embeds"
+            self.dummy_text = torch.from_numpy(torch.load(os.path.join(store_path, self.text_model_name + ".pt")))
         self.binary = binary
         self.multilabel = multilabel
 
@@ -147,7 +154,12 @@ class AdaptorFinetuner(LightningModule):
             else:
                 feats = self.backbone(x)
         feats = feats.view(feats.size(0), -1)
-        feats = self.adaptor(feats)
+        if self.text_model_name is not None:
+            batch_size = feats.size(0)
+            batch_text_dummy = self.dummy_text.repeat(batch_size, 1).to(feats.device)
+            _, _, feats, _ = self.adaptor(feats, batch_text_dummy, return_loss=False, return_dict=False)
+        else:
+            feats = self.adaptor(feats)
         logits = self.linear_layer(feats)
         if self.multilabel:
             loss = F.binary_cross_entropy_with_logits(logits.float(), y.float())

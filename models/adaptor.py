@@ -275,7 +275,7 @@ class Adaptor(LightningModule):
                 loss = clip_loss(logits_per_text)
 
             if not return_dict:
-                output = (logits_per_image, logits_per_text, text_embeds, image_embeds)
+                output = (logits_per_image, logits_per_text, image_embeds, text_embeds)
                 return ((loss,) + output) if loss is not None else output
 
             return CLIPOutput(

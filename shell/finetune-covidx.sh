@@ -11,13 +11,13 @@ export WANDB_DIR=/vol/bitbucket/jq619/
 export WANDB_DATA_DIR=/vol/bitbucket/jq619/wandb/
 export SAVED_MODEL_DIR="/vol/bitbucket/jq619/individual-project/trained_models/clf"
 export DATASET="covidx"
-for DATA_PCT in 1
+for DATA_PCT in 0.1
 do
-    for VISION_MODEL in "resnet-ae" # "dinov2-s"  "dinov2-b" 
+    for VISION_MODEL in "dinov2-b"  "dinov2-s" # "resnet-ae" #
     do
-        for TEXT_MODEL in  "clinicalbert" "cxrbert" # "bert" "biobert" "pubmedbert" 
+        for TEXT_MODEL in  "bert" "biobert" "clinicalbert" "cxrbert" "pubmedbert" 
         do
-            python ./finetune.py --dataset $DATASET --vision_model $VISION_MODEL --text_model $TEXT_MODEL --batch_size 512 --data_pct $DATA_PCT --num_workers 1 --num_layers 1 --num_train_epochs 200 --seed 1117 --lr 5e-4 --weight_decay 1e-4 --output_dir $SAVED_MODEL_DIR/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT} --postfix v2 --pretrain_wandb_project_name adaptor_pretrain_2_layers --wandb --project_name adaptor_finetune_2_layers --check_val_every_n_epochs 2
+            python ./finetune.py --dataset $DATASET --vision_model $VISION_MODEL --text_model $TEXT_MODEL --batch_size 128 --data_pct $DATA_PCT --num_workers 1 --num_layers 1 --num_train_epochs 200 --seed 42 --lr 5e-3 --weight_decay 1e-4 --output_dir $SAVED_MODEL_DIR/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT} --postfix v2 --pretrain_wandb_project_name adaptor_pretrain_2_layers --wandb --project_name adaptor_finetune_2_layers_dummy --check_val_every_n_epochs 5
             wandb artifact cache cleanup 1GB
         done
     done
