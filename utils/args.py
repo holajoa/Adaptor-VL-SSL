@@ -43,6 +43,7 @@ def get_train_parser():
     parser.add_argument("--weight_decay", type=float, default=1e-6)
     parser.add_argument("--num_train_epochs", type=int, default=1)
     parser.add_argument("--log_every_n_steps", type=int, default=200)
+    parser.add_argument("--patience_epochs", type=int, default=10)
 
     parser.add_argument(
         "--output_dir", type=str, default="./results", help="path to save model"

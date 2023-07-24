@@ -69,7 +69,8 @@ def main(args):
     vision_pretrained = vision_model_config["pretrained_weight"]
     vision_model_type = vision_model_config["vision_model_type"]
 
-    adaptor_ckpt = get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb)
+    adaptor_ckpt = get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb, 
+                                   postfix=args.postfix, project_name=args.pretrain_wandb_project_name)
     adaptor = Adaptor.load_from_checkpoint(adaptor_ckpt)
     print("Loaded adaptor from checkpoint")
 
@@ -79,6 +80,7 @@ def main(args):
             pretrained=False,
             out_channels=1,
             freeze_adaptor=True,
+            input_size=args.crop_size,
         )
 
     elif args.vision_model.startswith("dinov2-"):
@@ -94,6 +96,7 @@ def main(args):
             out_channels=1,
             features=[512, 256, 128, 64],
             freeze_adaptor=True,
+            input_size=args.crop_size,
         )
     else:
         raise NotImplementedError
@@ -130,14 +133,14 @@ def main(args):
         experiment_dir = logger.experiment.dir
         callbacks += [
             cb.LearningRateMonitor(logging_interval="step"),
-            cb.ModelCheckpoint(monitor=f"train_{model.metric_name}", mode="max"),
+            # cb.ModelCheckpoint(monitor=f"train_{model.metric_name}", mode="max"),
             cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"),
             cb.EarlyStopping(
-                monitor=f"val_loss",
-                min_delta=0.0,
-                patience=10,
+                monitor=f"val_{model.metric_name}",
+                min_delta=1e-5,
+                patience=args.patience_epochs // args.check_val_every_n_epochs,
                 verbose=False,
-                mode="min",
+                mode="max",
             ),
         ]
     else:
@@ -156,7 +159,7 @@ def main(args):
     trainer = Trainer(
         max_epochs=args.num_train_epochs,
         log_every_n_steps=args.log_every_n_steps,
-        check_val_every_n_epoch=1,
+        check_val_every_n_epoch=args.check_val_every_n_epochs,
         default_root_dir=args.output_dir,
         callbacks=callbacks,
         enable_progress_bar=False,
@@ -176,6 +179,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset", type=str, required=True, help="Choose between 'covidx' and 'rsna'"
     )
+    parser.add_argument(
+        "--check_val_every_n_epochs",
+        type=int,
+        default=2,
+        help="Check validation every n epochs",
+    )
+    parser.add_argument("--sweep", action="store_true")
+    parser.add_argument("--postfix", type=str, default="")
+    parser.add_argument("--pretrain_wandb_project_name", type=str, default="adaptor pretrain")
+    
     args = parser.parse_args()
 
     print("Number of GPUs available:", torch.cuda.device_count())

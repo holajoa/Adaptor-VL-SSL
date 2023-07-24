@@ -3,6 +3,7 @@
 import torch.nn as nn
 import torch
 import torchxrayvision as xrv
+from math import log2
 
 
 def double_conv(in_channels, out_channels):
@@ -21,7 +22,7 @@ def up_conv(in_channels, out_channels):
 
 
 class ResNetAEUNet(nn.Module):
-    def __init__(self, adaptor, pretrained=False, out_channels=1, freeze_adaptor=True):
+    def __init__(self, adaptor, pretrained=False, out_channels=1, freeze_adaptor=True, input_size=224):
         super().__init__()
 
         resnet_ae = xrv.autoencoders.ResNetAE(weights="101-elastic")
@@ -34,11 +35,20 @@ class ResNetAEUNet(nn.Module):
 
         self.adaptor = adaptor
 
-        self.neck = nn.Sequential(
-            nn.ConvTranspose2d(768, 512, kernel_size=3, stride=1, bias=False),
-            nn.ConvTranspose2d(512, 512, kernel_size=3, stride=2, bias=False),
+        if input_size == 224:
+            self.neck = nn.Sequential(
+                nn.ConvTranspose2d(768, 512, kernel_size=3, stride=1, bias=False),
+                nn.ConvTranspose2d(512, 512, kernel_size=3, stride=2, bias=False),
+            )
+        elif input_size % 224 == 0 and (log2(input_size // 224)).is_integer() :
+            self.neck = nn.Sequential(
+                nn.ConvTranspose2d(768, 512, kernel_size=3, stride=1, bias=False),
+                nn.ConvTranspose2d(512, 512, kernel_size=3, stride=2, bias=False), 
+                *[nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2, bias=False)]*int(log2(input_size // 224)),
         )
-
+        else:
+            raise ValueError(f"Unsupported input size {input_size}, only 224, 448 and 896 are supported.")
+        
         self.up_conv6 = up_conv(512, 512)
         self.conv6 = double_conv(512 + 1024, 512)
         self.up_conv7 = up_conv(512, 256)
@@ -128,7 +138,7 @@ class ResNetAEUNet(nn.Module):
         global_unimodal_features = self.get_global_features(unimodal_features)
         multimodal_features = self.fusion(global_unimodal_features)
         out = self.decode(
-            multimodal_features.unsqueeze(2).unsqueeze(3), encoder_features
+            multimodal_features.unsqueeze(2).unsqueeze(3), encoder_features, 
         )
 
         if return_dict:
@@ -143,13 +153,23 @@ class ResNetAEUNet(nn.Module):
 
 
 class ViTDecoder(nn.Module):
-    def __init__(self, in_channels, out_channels, features=[512, 256, 128, 64]):
+    def __init__(self, in_channels, out_channels, features=[512, 256, 128, 64], input_size=224):
         super().__init__()
-        self.decoder_0 = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, 3, padding=0),
-            nn.BatchNorm2d(in_channels),
-            nn.ReLU(inplace=True),
-        )
+        if input_size == 224:
+            self.decoder_0 = nn.Sequential(
+                nn.Conv2d(in_channels, in_channels, 3, padding=0),
+                nn.BatchNorm2d(in_channels),
+                nn.ReLU(inplace=True),
+            )
+        else:
+            assert input_size % 224 == 0 and (log2(input_size // 224)).is_integer(), f"Unsupported image size {input_size}, only 224, 448 and 896 are supported."
+            factor = input_size // 224
+            self.decoder_0 = nn.Sequential(
+                nn.Conv2d(in_channels, in_channels, 3, stride=1, padding=1),
+                nn.BatchNorm2d(in_channels),
+                nn.ReLU(inplace=True),
+                nn.AdaptiveAvgPool2d((14*factor, 14*factor)),
+            )
         self.decoder_1 = nn.Sequential(
             nn.Conv2d(in_channels, features[0], 3, padding=1),
             nn.BatchNorm2d(features[0]),
@@ -200,16 +220,19 @@ class DINOv2Segmenter(nn.Module):
         out_channels=1,
         features=[512, 256, 128, 64],
         freeze_adaptor=True,
+        input_size=224,
     ):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.out_channels = out_channels
         self.features = features
+        self.input_size = input_size
 
         self.encoder = backbone
         self.adaptor = adaptor
         self.decoder = ViTDecoder(
-            in_channels=hidden_dim, out_channels=out_channels, features=features
+            in_channels=hidden_dim, out_channels=out_channels, 
+            features=features, input_size=input_size
         )
 
         self._weights_init()
@@ -238,9 +261,10 @@ class DINOv2Segmenter(nn.Module):
     def forward(self, x, return_dict=False):
         features = self.encoder(x, is_training=True)["x_norm_patchtokens"]
         multimodal_features = self.adaptor(features)
-        output = self.decoder(
-            multimodal_features.reshape(-1, 16, 16, self.hidden_dim).permute(0, 3, 1, 2)
-        )
+        batch_size, num_patches, _ = multimodal_features.shape
+        patch_size = int(num_patches ** 0.5)
+        decoder_input = multimodal_features.reshape(batch_size, patch_size, patch_size, self.hidden_dim).permute(0, 3, 1, 2)
+        output = self.decoder(decoder_input)
         if return_dict:
             return {
                 "encoder_features": features,

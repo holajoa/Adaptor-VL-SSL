@@ -11,7 +11,7 @@ export WANDB_DIR=/vol/bitbucket/jq619/
 export WANDB_DATA_DIR=/vol/bitbucket/jq619/wandb/
 export SAVED_MODEL_DIR="/vol/bitbucket/jq619/individual-project/trained_models/segment"
 export DATASET="siim"
-for DATA_PCT in 0.01 0.1 1.0
+for DATA_PCT in 0.01
 do
     for VISION_MODEL in "resnet-ae" "dinov2-b" "dinov2-s"
     do
