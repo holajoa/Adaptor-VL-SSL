@@ -8,6 +8,8 @@ import torch.nn as nn
 from mgca.utils.segmentation_loss import MixedLoss
 from pytorch_lightning import LightningModule
 
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+
 torch.autograd.set_detect_anomaly(True)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = True
@@ -127,8 +129,15 @@ class AdaptorSegmenter(LightningModule):
             betas=(0.9, 0.999),
             weight_decay=self.hparams.weight_decay,
         )
-
-        return optimizer
+        # return optimizer
+        lr_schedule = CosineAnnealingWarmRestarts(
+            optimizer=optimizer,
+            T_0=40,
+            T_mult=1,
+            eta_min=1e-8,
+        )
+        return {"optimizer": optimizer, "lr_scheduler": lr_schedule}
+        
 
     @staticmethod
     def num_training_steps(trainer, dm) -> int:

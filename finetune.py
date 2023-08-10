@@ -77,7 +77,7 @@ def main(args):
         backbone=backbone,
         adaptor=adaptor,
         model_name=args.vision_model,
-        text_model_name=args.text_model,
+        text_model_name=args.text_model if args.dummy else None,
         in_features=adaptor.projection_dim,
         num_classes=dataset_cfg["num_classes"],
         # num_layers=args.num_layers,
@@ -193,6 +193,7 @@ if __name__ == "__main__":
         default=2,
         help="Check validation every n epochs",
     )
+    parser.add_argument("--dummy", action="store_true")
     parser.add_argument("--sweep", action="store_true")
     parser.add_argument("--postfix", type=str, default="")
     parser.add_argument("--pretrain_wandb_project_name", type=str, default="adaptor pretrain")

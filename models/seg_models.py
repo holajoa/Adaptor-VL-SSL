@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch
 import torchxrayvision as xrv
 from math import log2
+from typing import Tuple
 
 
 def double_conv(in_channels, out_channels):
@@ -19,6 +20,15 @@ def double_conv(in_channels, out_channels):
 
 def up_conv(in_channels, out_channels):
     return nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+
+
+class Resize(nn.Module):
+    def __init__(self, size:Tuple[int]):
+        super(Resize, self).__init__()
+        self.size = size
+
+    def forward(self, x):
+        return nn.functional.interpolate(x, size=self.size, mode='bicubic', align_corners=False)
 
 
 class ResNetAEUNet(nn.Module):
@@ -162,13 +172,20 @@ class ViTDecoder(nn.Module):
                 nn.ReLU(inplace=True),
             )
         else:
-            assert input_size % 224 == 0 and (log2(input_size // 224)).is_integer(), f"Unsupported image size {input_size}, only 224, 448 and 896 are supported."
+            assert input_size in [224, 896], f"Unsupported image size {input_size}, only 224 and 896 are supported."
             factor = input_size // 224
             self.decoder_0 = nn.Sequential(
+                # nn.Conv2d(in_channels, in_channels, 5, stride=1, padding=0),
+                # nn.BatchNorm2d(in_channels),
+                # nn.ReLU(inplace=True),
+                # nn.Conv2d(in_channels, in_channels, 5, stride=1, padding=0),
+                # nn.BatchNorm2d(in_channels),
+                # nn.ReLU(inplace=True),
                 nn.Conv2d(in_channels, in_channels, 3, stride=1, padding=1),
                 nn.BatchNorm2d(in_channels),
                 nn.ReLU(inplace=True),
-                nn.AdaptiveAvgPool2d((14*factor, 14*factor)),
+                nn.Upsample(scale_factor=14/16)
+                # nn.AdaptiveAvgPool2d((14*factor, 14*factor)),                
             )
         self.decoder_1 = nn.Sequential(
             nn.Conv2d(in_channels, features[0], 3, padding=1),

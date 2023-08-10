@@ -53,7 +53,7 @@ def main(args):
         transforms=data_transform,
         data_pct=args.data_pct,
         batch_size=args.batch_size,
-        num_workers=1,
+        num_workers=8,
         crop_size=args.crop_size,
         seed=args.seed,
         **dataset_kwargs,
@@ -134,15 +134,18 @@ def main(args):
         callbacks += [
             cb.LearningRateMonitor(logging_interval="step"),
             # cb.ModelCheckpoint(monitor=f"train_{model.metric_name}", mode="max"),
-            cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"),
-            cb.EarlyStopping(
-                monitor=f"val_{model.metric_name}",
-                min_delta=1e-5,
-                patience=args.patience_epochs // args.check_val_every_n_epochs,
-                verbose=False,
-                mode="max",
-            ),
         ]
+        if not args.disable_checkpointing:
+            callbackd +=[
+                cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"),
+                cb.EarlyStopping(
+                    monitor=f"val_{model.metric_name}",
+                    min_delta=1e-5,
+                    patience=args.patience_epochs // args.check_val_every_n_epochs,
+                    verbose=False,
+                    mode="max",
+                ),
+            ]
     else:
         logger = CSVLogger(args.output_dir)
 
@@ -160,6 +163,7 @@ def main(args):
         max_epochs=args.num_train_epochs,
         log_every_n_steps=args.log_every_n_steps,
         check_val_every_n_epoch=args.check_val_every_n_epochs,
+        # limit_val_batches=100, 
         default_root_dir=args.output_dir,
         callbacks=callbacks,
         enable_progress_bar=False,
@@ -188,6 +192,7 @@ if __name__ == "__main__":
     parser.add_argument("--sweep", action="store_true")
     parser.add_argument("--postfix", type=str, default="")
     parser.add_argument("--pretrain_wandb_project_name", type=str, default="adaptor pretrain")
+    parser.add_argument("--disable_checkpointing", action="store_true")
     
     args = parser.parse_args()
 
