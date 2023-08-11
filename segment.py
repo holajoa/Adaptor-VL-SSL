@@ -136,7 +136,7 @@ def main(args):
             # cb.ModelCheckpoint(monitor=f"train_{model.metric_name}", mode="max"),
         ]
         if not args.disable_checkpointing:
-            callbackd +=[
+            callbacks +=[
                 cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"),
                 cb.EarlyStopping(
                     monitor=f"val_{model.metric_name}",
@@ -160,6 +160,7 @@ def main(args):
         }
 
     trainer = Trainer(
+        precision=16, 
         max_epochs=args.num_train_epochs,
         log_every_n_steps=args.log_every_n_steps,
         check_val_every_n_epoch=args.check_val_every_n_epochs,

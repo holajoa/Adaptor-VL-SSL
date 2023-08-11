@@ -52,7 +52,7 @@
             "python":"/vol/bitbucket/jq619/idv/bin/python",
             "args":[
                 "--vision_model",
-                "dinov2-s",
+                "resnet-ae",
                 "--text_model",
                 "biobert",
                 "--batch_size",

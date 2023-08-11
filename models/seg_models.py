@@ -118,7 +118,6 @@ class ResNetAEUNet(nn.Module):
         neck = self.neck(x)
 
         x = self.up_conv6(neck)
-
         x = torch.cat([x, block4], dim=1)
         x = self.conv6(x)
 

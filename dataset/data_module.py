@@ -35,7 +35,8 @@ class AdaptorDataModule(pl.LightningDataModule):
     def setup(self, stage: str):
         if stage == "fit":
             train_dataset = self._get_dataset(split="train")
-            val_dataset = self._get_dataset(split="valid")
+            # val_dataset = self._get_dataset(split="valid")
+            val_dataset = self._get_dataset(split="test")
 
             self.train_steps = self._get_num_steps(train_dataset)
             self.val_steps = self._get_num_steps(val_dataset)
@@ -69,13 +70,14 @@ class AdaptorDataModule(pl.LightningDataModule):
     def _get_num_steps(self, dataset):
         return ceil(len(dataset) / self.batch_size)
 
-    def _get_dataloader(self, split="train"):
+    def _get_dataloader(self, split="train", shuffle=False):
         return DataLoader(
             self.datasets[split],
             pin_memory=True,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             collate_fn=self.collate_fn,
+            shuffle=shuffle,
         )
 
     def train_dataloader(self):
