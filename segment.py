@@ -106,6 +106,7 @@ def main(args):
         adaptor=adaptor,
         learning_rate=args.lr,
         weight_decay=args.weight_decay,
+        alpha=args.alpha,
     )
 
     seed_everything(args.seed, workers=True)
@@ -162,9 +163,10 @@ def main(args):
     trainer = Trainer(
         precision=16, 
         max_epochs=args.num_train_epochs,
+        min_epochs=args.num_train_epochs, 
         log_every_n_steps=args.log_every_n_steps,
         check_val_every_n_epoch=args.check_val_every_n_epochs,
-        # limit_val_batches=100, 
+        limit_val_batches=100, 
         default_root_dir=args.output_dir,
         callbacks=callbacks,
         enable_progress_bar=False,
@@ -181,6 +183,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = get_train_parser()
+    parser.add_argument("--alpha", type=float, default=10)
     parser.add_argument(
         "--dataset", type=str, required=True, help="Choose between 'covidx' and 'rsna'"
     )

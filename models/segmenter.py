@@ -22,14 +22,16 @@ class AdaptorSegmenter(LightningModule):
         seg_model: nn.Module,
         learning_rate: float = 5e-4,
         weight_decay: float = 1e-6,
+        alpha: float = 10,
         *args,
         **kwargs,
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["seg_model"])
         self.model = seg_model
-        self.loss = MixedLoss(alpha=10)
+        self.loss = MixedLoss(alpha=alpha)
         self.metric_name = "dice"
+        self.alpha = alpha
 
     def shared_step(self, batch, batch_idx, split):
         x, y = batch["image"], batch["mask"]
@@ -132,7 +134,7 @@ class AdaptorSegmenter(LightningModule):
         # return optimizer
         lr_schedule = CosineAnnealingWarmRestarts(
             optimizer=optimizer,
-            T_0=40,
+            T_0=80,
             T_mult=1,
             eta_min=1e-8,
         )
