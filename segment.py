@@ -53,7 +53,7 @@ def main(args):
         transforms=data_transform,
         data_pct=args.data_pct,
         batch_size=args.batch_size,
-        num_workers=8,
+        num_workers=args.num_workers,
         crop_size=args.crop_size,
         seed=args.seed,
         **dataset_kwargs,
