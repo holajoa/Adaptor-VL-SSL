@@ -107,6 +107,7 @@ def main(args):
         learning_rate=args.lr,
         weight_decay=args.weight_decay,
         alpha=args.alpha,
+        modified_dice_loss=not args.original_dice_loss, 
     )
 
     seed_everything(args.seed, workers=True)
@@ -141,7 +142,7 @@ def main(args):
                 cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"),
                 cb.EarlyStopping(
                     monitor=f"val_{model.metric_name}",
-                    min_delta=1e-5,
+                    min_delta=1e-3,
                     patience=args.patience_epochs // args.check_val_every_n_epochs,
                     verbose=False,
                     mode="max",
@@ -157,16 +158,16 @@ def main(args):
             "accelerator": "gpu",
             "devices": args.n_gpus,
             "num_nodes": 1,
-            "strategy": "ddp",
+            "strategy": "ddp_find_unused_parameters_false", 
         }
 
     trainer = Trainer(
         precision=16, 
         max_epochs=args.num_train_epochs,
-        min_epochs=args.num_train_epochs, 
+        # min_epochs=int(args.num_train_epochs*0.8), 
         log_every_n_steps=args.log_every_n_steps,
         check_val_every_n_epoch=args.check_val_every_n_epochs,
-        limit_val_batches=100, 
+        # limit_val_batches=100, 
         default_root_dir=args.output_dir,
         callbacks=callbacks,
         enable_progress_bar=False,
@@ -197,6 +198,7 @@ if __name__ == "__main__":
     parser.add_argument("--postfix", type=str, default="")
     parser.add_argument("--pretrain_wandb_project_name", type=str, default="adaptor pretrain")
     parser.add_argument("--disable_checkpointing", action="store_true")
+    parser.add_argument("--original_dice_loss", action="store_true")
     
     args = parser.parse_args()
 

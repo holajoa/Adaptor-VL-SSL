@@ -11,7 +11,7 @@ from transformers.models.bert.modeling_bert import BertEncoder, BertPooler
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 from transformers.modeling_utils import ModuleUtilsMixin
-from transformers.models.clip.modeling_clip import CLIPOutput, clip_loss
+from transformers.models.clip.modeling_clip import CLIPOutput
 
 from transformers.optimization import get_linear_schedule_with_warmup
 
@@ -28,6 +28,24 @@ def _get_activation_fn(activation: str):
     elif activation == "gelu":
         return F.gelu
     raise RuntimeError("activation should be relu/gelu, not {}".format(activation))
+
+
+
+class CLIPLossFromSimilarities(nn.Module):
+    def __init__(self, image_weight=0.5):
+        super().__init__()
+        self.image_weight = image_weight
+    
+    @staticmethod
+    def contrastive_loss(logits: torch.Tensor, dim: int) -> torch.Tensor:
+        neg_ce = torch.diag(F.log_softmax(logits, dim=dim))
+        return - neg_ce.mean()
+
+    def forward(self, similarity: torch.Tensor) -> torch.Tensor:
+        caption_loss = self.contrastive_loss(similarity, dim=0)
+        image_loss = self.contrastive_loss(similarity, dim=1)
+        
+        return (1-self.image_weight) * caption_loss + self.image_weight * image_loss
 
 
 class TransformerEncoderLayerWithCrossAttention(nn.Module):
@@ -55,7 +73,7 @@ class TransformerEncoderLayerWithCrossAttention(nn.Module):
         self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"
     ):
         super(TransformerEncoderLayerWithCrossAttention, self).__init__()
-        self.attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        self.attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=True)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
@@ -97,7 +115,8 @@ class TransformerEncoderLayerWithCrossAttention(nn.Module):
             )[0]
         else:  # run self attention
             src2 = self.attn(
-                src, src, src, attn_mask=src_mask, key_padding_mask=src_key_padding_mask
+                src, src, src, attn_mask=src_mask, 
+                key_padding_mask=src_key_padding_mask, 
             )[0]
         src = src + self.dropout1(src2)
         src = self.norm1(src)
@@ -110,6 +129,15 @@ class TransformerEncoderLayerWithCrossAttention(nn.Module):
         return src
 
 
+class Identity(nn.Module):
+    def __init__(self, **kwargs):
+        super(Identity, self).__init__()
+        print("Unused kwargs:", kwargs)
+        
+    def forward(self, x):
+        return x
+
+
 class AdaptorModule(nn.Module, ModuleUtilsMixin):
     def __init__(
         self,
@@ -118,7 +146,9 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
         num_layers: int = 1,
     ):
         super(AdaptorModule, self).__init__()
-        if num_layers > 1:
+        if num_layers == 0:
+            self.encoder = Identity()
+        elif num_layers > 1:
             self.encoder = nn.ModuleList(
                 [
                     TransformerEncoderLayerWithCrossAttention(embed_dim, num_heads)
@@ -144,18 +174,34 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
             assert (
                 text_embeds.device == image_embeds.device
             ), "text and image embeddings must be on the same device"
+            
+            if text_embeds.dim() == 2:
+                text_embeds = text_embeds.unsqueeze(1)
+            if image_embeds.dim() == 2:
+                image_embeds = image_embeds.unsqueeze(1)
+                
             ## Run through cross-attention
             for layer in encoder_layers:
+                if isinstance(layer, Identity):
+                    continue
                 image_embeds = layer(
                     src=image_embeds, query=text_embeds, run_cross_attn=True
                 )
                 text_embeds = layer(
                     src=text_embeds, query=image_embeds, run_cross_attn=True
                 )
+                
+            if text_embeds.dim() == 3:
+                text_embeds = text_embeds.squeeze(1)
+            if image_embeds.dim() == 3:
+                image_embeds = image_embeds.squeeze(1)
+                
             return image_embeds, text_embeds
         else:
             ## Run through self-attention if no text embedding is inputed - downstream task.
             for layer in encoder_layers:
+                if isinstance(layer, Identity):
+                    continue
                 image_embeds = layer(src=image_embeds, run_cross_attn=False)
             return image_embeds
 
@@ -206,6 +252,7 @@ class Adaptor(LightningModule):
         projection_dim: int = 512,
         num_layers: int = 1,
         lr: float = 1e-4,
+        image_weight: float = 0.75,
     ):
         super(Adaptor, self).__init__()
 
@@ -223,6 +270,7 @@ class Adaptor(LightningModule):
 
         self.logit_scale_init_value = logit_scale_init_value
         self.logit_scale = nn.Parameter(torch.ones([]) * logit_scale_init_value)
+        self.loss_fn = CLIPLossFromSimilarities(image_weight=image_weight)
 
         self.lr = lr
         self.save_hyperparameters()
@@ -272,7 +320,7 @@ class Adaptor(LightningModule):
 
             loss = None
             if return_loss:
-                loss = clip_loss(logits_per_text)
+                loss = self.loss_fn(logits_per_text)
 
             if not return_dict:
                 output = (logits_per_image, logits_per_text, image_embeds, text_embeds)
