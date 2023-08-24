@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 
-DATA_BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../autodl-tmp/data")
+DATA_BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data")
 DATA_BASE_DIR = Path(DATA_BASE_DIR)
 # #############################################
 # CheXpert constants

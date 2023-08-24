@@ -7,6 +7,7 @@ saved_datasets/*
 trained_models/*
 trained_models_/*
 logs/*
+figs/*
 *.yaml
 
 # Byte-compiled / optimized / DLL files

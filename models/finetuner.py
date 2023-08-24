@@ -72,7 +72,7 @@ class AdaptorFinetuner(LightningModule):
         self.model_name = model_name
         self.text_model_name = text_model_name
         if self.text_model_name is not None:
-            store_path = "/vol/bitbucket/jq619/individual-project/saved_embeddings/dummy_text_embeds"
+            store_path = "/vol/bitbucket/jq619/adaptor-thesis/saved_embeddings/dummy_text_embeds"
             self.dummy_text = torch.from_numpy(torch.load(os.path.join(store_path, self.text_model_name + ".pt")))
         self.binary = binary
         self.multilabel = multilabel

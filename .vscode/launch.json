@@ -103,7 +103,7 @@
                 "--seed",
                 "42",
                 "--output_dir",
-                "/vol/bitbucket/jq619/individual-project/trained_models/pretrain/resnet-ae_biobert",
+                "/vol/bitbucket/jq619/adaptor-thesis/trained_models/pretrain/resnet-ae_biobert",
                 "--crop_size",
                 "224",
                 "--dataset",
@@ -166,7 +166,7 @@
                 "8",
                 "--full",
                 "--image_embeds_raw_dir",
-                "/vol/bitbucket/jq619/individual-project/saved_embeddings/image_embeds/full"
+                "/vol/bitbucket/jq619/adaptor-thesis/saved_embeddings/image_embeds/full"
                 // "--force_rebuild_dataset",
             ],
             "justMyCode": false,
@@ -206,7 +206,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "cwd": "/vol/bitbucket/jq619/individual-project/MGCA/mgca/models/mgca/mgca_module.py",
+            "cwd": "/vol/bitbucket/jq619/adaptor-thesis/MGCA/mgca/models/mgca/mgca_module.py",
             "python":"/vol/bitbucket/jq619/mgca/bin/python",
             "args":[],
             "justMyCode": false,
