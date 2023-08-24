@@ -11,16 +11,22 @@ export WANDB_DIR=/vol/bitbucket/jq619/
 export WANDB_DATA_DIR=/vol/bitbucket/jq619/wandb/
 export SAVED_MODEL_DIR="/vol/bitbucket/jq619/individual-project/trained_models/clf"
 export DATASET="covidx"
-for DATA_PCT in 1.
+export DATA_PCT=0.01
+for DATA_PCT in 1.0
 do
-    for VISION_MODEL in  "resnet-ae" # "dinov2-b"  "dinov2-s" 
+    for VISION_MODEL in "dinov2-b" "resnet-ae" "dinov2-s"
     do
-        for TEXT_MODEL in  "pubmedbert" # "bert" "biobert" "clinicalbert" "cxrbert" 
+        for TEXT_MODEL in  "bert" # "biobert" "clinicalbert" "cxrbert" "pubmedbert"
         do
-            python ./finetune.py --dataset $DATASET --vision_model $VISION_MODEL --text_model $TEXT_MODEL --batch_size 512 --data_pct $DATA_PCT --num_workers 1 --num_layers 1 --num_train_epochs 200 --seed 1117 --lr 5e-4 --weight_decay 0.05 --output_dir $SAVED_MODEL_DIR/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT} --postfix v2 --pretrain_wandb_project_name adaptor_pretrain_2_layers --wandb --project_name adaptor_finetune_2_layers --check_val_every_n_epochs 5
+            export VERSION=3
+            python ./finetune.py --dataset $DATASET --vision_model $VISION_MODEL --text_model $TEXT_MODEL --batch_size 128 --data_pct $DATA_PCT --num_workers 8 --num_train_epochs 100 --seed 1024 --lr 5e-4 --weight_decay 0.05 --output_dir $SAVED_MODEL_DIR/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT} --postfix v${VERSION} --pretrain_wandb_project_name adaptor_pretrain_v${VERSION} --wandb --project_name adaptor_finetune_v${VERSION} --check_val_every_n_epochs 1 --patience_epochs 10  | tee logs/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT}.txt
             wandb artifact cache cleanup 1GB
+            # export POSTFIX="_no_adaptor"
+            # python ./finetune.py --disable_adaptor --dataset $DATASET --vision_model $VISION_MODEL --text_model $TEXT_MODEL --batch_size 128 --data_pct $DATA_PCT --num_workers 8 --num_train_epochs 100 --seed 1117 --lr 5e-4 --weight_decay 0.05 --output_dir $SAVED_MODEL_DIR/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT} --postfix v2 --pretrain_wandb_project_name adaptor_pretrain_2_layers --wandb --project_name adaptor_finetune_2_layers${POSTFIX} --check_val_every_n_epochs 1 --patience_epochs 5  | tee logs/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT}_no_adaptor.txt
+            # wandb artifact cache cleanup 1GB
         done
     done
 done
+# python ./finetune.py --dataset covidx --vision_model dinov2-s --text_model cxrbert --batch_size 128 --data_pct 1.0 --num_workers 8 --num_train_epochs 100 --seed 1117 --lr 5e-4 --weight_decay 0.05 --output_dir /vol/bitbucket/jq619/individual-project/trained_models/clf/dinov2-s_cxrbert_covidx_1.0 --postfix v2 --pretrain_wandb_project_name adaptor_pretrain_2_layers --wandb --project_name adaptor_finetune_2_layers --check_val_every_n_epochs 1 --patience_epochs 10
 /usr/bin/nvidia-smi
-uptime
+uptime8

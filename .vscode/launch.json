@@ -41,7 +41,7 @@
                 "--num_layers", 
                 "2", 
             ],
-            "justMyCode": true
+            "justMyCode": false
         },
         {
             "name": "Segment",
@@ -67,10 +67,10 @@
                 "42",
                 "--output_dir",
                 "/vol/bitbucket/jq619/individual-project/trained_models/segment/resnet-ae_biobert",
-                "--crop_size",
-                "896",
+                // "--crop_size",
+                // "896",
                 "--dataset",
-                "siim",
+                "rsna",
                 "--wandb",
                 "--cpu", 
             ],

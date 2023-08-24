@@ -11,15 +11,17 @@ export WANDB_DIR=/vol/bitbucket/jq619/
 export WANDB_DATA_DIR=/vol/bitbucket/jq619/wandb/
 export SAVED_MODEL_DIR="/vol/bitbucket/jq619/individual-project/trained_models/segment"
 export DATASET="siim"
-export PROJECT_POSTFIX=""
-export SEED=1024
-export DATA_PCT=1.0
-for TEXT_MODEL in "bert" "biobert" "clinicalbert" "cxrbert" "pubmedbert"
+# export PROJECT_POSTFIX="_update_loss"
+# export SEED=1024
+export VERSION=0
+export SEED=7
+export DATA_PCT=0.01
+for TEXT_MODEL in "biobert" # "clinicalbert" "cxrbert" "bert" "pubmedbert" 
 do
-    for VISION_MODEL in "resnet-ae" "dinov2-b" "dinov2-s" 
+    for VISION_MODEL in  "dinov2-b" # "resnet-ae" "dinov2-s" 
     do
         echo ${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT}
-        python ./segment.py  --seed $SEED --alpha 2.5 --dataset $DATASET --crop_size 896 --vision_model $VISION_MODEL --text_model $TEXT_MODEL --batch_size 6 --data_pct $DATA_PCT --num_workers 1 --num_train_epochs 80 --lr 5e-4 --weight_decay 0.1 --output_dir $SAVED_MODEL_DIR/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT} --wandb --postfix v2 --pretrain_wandb_project_name adaptor_pretrain_2_layers --wandb --project_name adaptor_segment_2_layers${PROJECT_POSTFIX} --check_val_every_n_epochs 1 --patience_epochs 5
+        python ./segment.py --n_gpus 2 --seed $SEED --dataset $DATASET --crop_size 896 --vision_model $VISION_MODEL --text_model $TEXT_MODEL --batch_size 4 --data_pct $DATA_PCT --num_workers 8 --num_train_epochs 100 --lr 5e-4 --weight_decay 1e-4 --output_dir $SAVED_MODEL_DIR/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT} --wandb --postfix v${VERSION} --pretrain_wandb_project_name adaptor_pretrain_v${VERSION} --wandb --project_name adaptor_segment_v${VERSION} --check_val_every_n_epochs 5 --patience_epochs 20 | tee logs/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT}.txt
         wandb artifact cache cleanup 1GB
     done
 done

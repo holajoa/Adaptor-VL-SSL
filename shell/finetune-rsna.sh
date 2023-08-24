@@ -19,7 +19,7 @@ for VISION_MODEL in "dinov2-b" # "dinov2-s" "resnet-ae"
 do
     for TEXT_MODEL in "pubmedbert"  # "bert" "clinicalbert" "biobert" "cxrbert"
     do
-        python ./finetune.py --dataset $DATASET --vision_model $VISION_MODEL --text_model $TEXT_MODEL --batch_size $BATCH_SIZE --data_pct $DATA_PCT --num_workers 1 --num_layers 1 --num_train_epochs 100 --seed 42 --lr $LR --weight_decay $WD --output_dir $SAVED_MODEL_DIR/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT} --postfix v2 --pretrain_wandb_project_name adaptor_pretrain_2_layers --wandb --project_name adaptor_finetune_2_layers --check_val_every_n_epochs 5
+        python ./finetune.py --dataset $DATASET --vision_model $VISION_MODEL --text_model $TEXT_MODEL --batch_size $BATCH_SIZE --data_pct $DATA_PCT --num_workers 1  --num_train_epochs 100 --seed 42 --lr $LR --weight_decay $WD --output_dir $SAVED_MODEL_DIR/${VISION_MODEL}_${TEXT_MODEL}_${DATASET}_${DATA_PCT} --postfix v2 --pretrain_wandb_project_name adaptor_pretrain_2_layers --wandb --project_name adaptor_finetune_2_layers --check_val_every_n_epochs 1
         wandb artifact cache cleanup 1GB
     done
 done

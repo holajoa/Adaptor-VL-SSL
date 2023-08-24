@@ -32,7 +32,7 @@ def get_train_parser():
     parser.add_argument(
         "--num_layers",
         type=int,
-        default=1,
+        default=2,
         help="number of transformer layers to use in adaptor",
     )
     parser.add_argument(

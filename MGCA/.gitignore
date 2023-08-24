@@ -1,20 +1,9 @@
-*.pth
-weights/*
-events.out.*
-saved_embeddings*
-saved_datasets/*
-*.out
-trained_models/*
-trained_models_/*
-logs/*
-cpu_tests/*
-figs/*
-
 # Byte-compiled / optimized / DLL files
-data/*
 __pycache__/
 *.py[cod]
 *$py.class
+*.out
+trained_models/*
 
 # C extensions
 *.so
@@ -140,3 +129,17 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+data/
+input_data
+*.ckpt
+*.pth.tar
+*.pkl
+*.pth
+
+__pycache__
+.vscode/
+*.npz
+*.svg
+*.eps
+*.pth

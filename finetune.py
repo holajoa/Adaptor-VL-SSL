@@ -1,11 +1,12 @@
 import torch
+from torch.nn import Identity
 
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.loggers import CSVLogger, WandbLogger
 import pytorch_lightning.callbacks as cb
 
 from models.configurations import TEXT_PRETRAINED, VISION_PRETRAINED
-from models.finetuner import AdaptorFinetuner
+from models.finetuner import AdaptorFinetuner, SSLEvaluator
 from models.adaptor import Adaptor
 from utils.model_utils import get_newest_ckpt, StreamingProgressBar
 from dataset.dataset import clf_collator
@@ -18,6 +19,7 @@ import wandb
 
 
 def main(args):
+    print("I'm running! ")
     seed_everything(args.seed, workers=True)
     
     if args.vision_model not in VISION_PRETRAINED.keys():
@@ -80,7 +82,6 @@ def main(args):
         text_model_name=args.text_model if args.dummy else None,
         in_features=adaptor.projection_dim,
         num_classes=dataset_cfg["num_classes"],
-        # num_layers=args.num_layers,
         hidden_dim=args.hidden_dim,
         dropout=args.dropout,
         learning_rate=args.lr,
@@ -89,15 +90,14 @@ def main(args):
         multilabel=dataset_cfg["multilabel"],
         freeze_adaptor=not args.unfreeze_adaptor,
     )
-    # model = AdaptorPipelineWithClassificationHead(
-    #     text_model=args.text_model,
-    #     vision_model=args.vision_model,
-    #     adaptor_ckpt=get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb),
-    #     num_classes=dataset_cfg['num_classes'],
-    #     lr=args.lr,
-    # )
-    # if not args.unfreeze_adaptor:
-    #     freeze_adaptor(model)
+    if args.disable_adaptor:
+        model.adaptor = Identity()
+        model.linear_layer = SSLEvaluator(
+            n_input=VISION_PRETRAINED[args.vision_model]['vision_output_dim'],
+            n_classes=model.num_classes,
+            p=args.dropout, 
+            n_hidden=args.hidden_dim,
+        )
 
     callbacks = [
         StreamingProgressBar(
@@ -122,11 +122,6 @@ def main(args):
         experiment_dir = logger.experiment.dir
         callbacks += [
             cb.LearningRateMonitor(logging_interval="step"),
-            # cb.ModelCheckpoint(
-            #     monitor=f"train_{model.metric_name}_step",
-            #     mode="max",
-            #     every_n_train_steps=10,
-            # ),
             cb.ModelCheckpoint(monitor=f"val_{model.metric_name}", mode="max"),
             cb.EarlyStopping(
                 monitor=f"val_{model.metric_name}",
@@ -146,12 +141,12 @@ def main(args):
             "accelerator": "gpu",
             "devices": args.n_gpus,
             "num_nodes": 1,
-            "strategy": "ddp",
+            "strategy": "ddp_find_unused_parameters_false",
         }
 
     trainer = Trainer(
         max_epochs=args.num_train_epochs,
-        min_epochs=int(args.num_train_epochs * 0.1),
+        # min_epochs=int(args.num_train_epochs * 0.1),
         log_every_n_steps=args.log_every_n_steps,
         check_val_every_n_epoch=args.check_val_every_n_epochs,
         default_root_dir=args.output_dir,
@@ -197,6 +192,7 @@ if __name__ == "__main__":
     parser.add_argument("--sweep", action="store_true")
     parser.add_argument("--postfix", type=str, default="")
     parser.add_argument("--pretrain_wandb_project_name", type=str, default="adaptor pretrain")
+    parser.add_argument("--disable_adaptor", action="store_true")
     args = parser.parse_args()
 
     print("Number of GPUs available:", torch.cuda.device_count())
