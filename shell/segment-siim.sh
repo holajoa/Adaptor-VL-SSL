@@ -11,7 +11,7 @@ export WANDB_DIR=/vol/bitbucket/jq619/
 export WANDB_DATA_DIR=/vol/bitbucket/jq619/wandb/
 export SAVED_MODEL_DIR="/vol/bitbucket/jq619/adaptor-thesis/trained_models/segment"
 export DATASET="siim"
-export SEED=1117
+export SEED=7
 export VERSION=3
 for DATA_PCT in 0.1 0.01
 do
