@@ -63,11 +63,13 @@ def load_vision_model(
         return AutoModel.from_pretrained(vision_pretrained).base_model
 
 
-def get_newest_ckpt(vision_model, text_model, wandb=False, project_name="adaptor pretrain", postfix=""):
+def get_newest_ckpt(
+    vision_model, text_model, wandb=False, project_name="adaptor pretrain", postfix=""
+):
     if postfix:
         postfix = f"_{postfix}"
     base_dir = os.path.join(
-        WORKING_DIR, 
+        WORKING_DIR,
         f"trained_models/pretrain/{vision_model}_{text_model}{postfix}/{project_name}/",
     )
     base_dir = os.path.join(

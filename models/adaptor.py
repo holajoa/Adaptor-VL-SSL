@@ -30,22 +30,21 @@ def _get_activation_fn(activation: str):
     raise RuntimeError("activation should be relu/gelu, not {}".format(activation))
 
 
-
 class CLIPLossFromSimilarities(nn.Module):
     def __init__(self, image_weight=0.5):
         super().__init__()
         self.image_weight = image_weight
-    
+
     @staticmethod
     def contrastive_loss(logits: torch.Tensor, dim: int) -> torch.Tensor:
         neg_ce = torch.diag(F.log_softmax(logits, dim=dim))
-        return - neg_ce.mean()
+        return -neg_ce.mean()
 
     def forward(self, similarity: torch.Tensor) -> torch.Tensor:
         caption_loss = self.contrastive_loss(similarity, dim=0)
         image_loss = self.contrastive_loss(similarity, dim=1)
-        
-        return (1-self.image_weight) * caption_loss + self.image_weight * image_loss
+
+        return (1 - self.image_weight) * caption_loss + self.image_weight * image_loss
 
 
 class TransformerEncoderLayerWithCrossAttention(nn.Module):
@@ -73,7 +72,9 @@ class TransformerEncoderLayerWithCrossAttention(nn.Module):
         self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"
     ):
         super(TransformerEncoderLayerWithCrossAttention, self).__init__()
-        self.attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=True)
+        self.attn = nn.MultiheadAttention(
+            d_model, nhead, dropout=dropout, batch_first=True
+        )
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
@@ -115,8 +116,11 @@ class TransformerEncoderLayerWithCrossAttention(nn.Module):
             )[0]
         else:  # run self attention
             src2 = self.attn(
-                src, src, src, attn_mask=src_mask, 
-                key_padding_mask=src_key_padding_mask, 
+                src,
+                src,
+                src,
+                attn_mask=src_mask,
+                key_padding_mask=src_key_padding_mask,
             )[0]
         src = src + self.dropout1(src2)
         src = self.norm1(src)
@@ -133,7 +137,7 @@ class Identity(nn.Module):
     def __init__(self, **kwargs):
         super(Identity, self).__init__()
         print("Unused kwargs:", kwargs)
-        
+
     def forward(self, x):
         return x
 
@@ -174,12 +178,12 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
             assert (
                 text_embeds.device == image_embeds.device
             ), "text and image embeddings must be on the same device"
-            
+
             if text_embeds.dim() == 2:
                 text_embeds = text_embeds.unsqueeze(1)
             if image_embeds.dim() == 2:
                 image_embeds = image_embeds.unsqueeze(1)
-                
+
             ## Run through cross-attention
             for layer in encoder_layers:
                 if isinstance(layer, Identity):
@@ -190,12 +194,12 @@ class AdaptorModule(nn.Module, ModuleUtilsMixin):
                 text_embeds = layer(
                     src=text_embeds, query=image_embeds, run_cross_attn=True
                 )
-                
+
             if text_embeds.dim() == 3:
                 text_embeds = text_embeds.squeeze(1)
             if image_embeds.dim() == 3:
                 image_embeds = image_embeds.squeeze(1)
-                
+
             return image_embeds, text_embeds
         else:
             ## Run through self-attention if no text embedding is inputed - downstream task.
@@ -371,15 +375,9 @@ class Adaptor(LightningModule):
 
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.lr, weight_decay=0.01)
-        # lr_schedule = CosineAnnealingWarmRestarts(
-        #     optimizer=optimizer,
-        #     T_0=int(self.training_steps * 0.4),
-        #     T_mult=0.5,
-        #     eta_min=1e-8,
-        # )
         lr_schedule = get_linear_schedule_with_warmup(
-            optimizer=optimizer,    
-            num_warmup_steps=int(self.training_steps * .02),
+            optimizer=optimizer,
+            num_warmup_steps=int(self.training_steps * 0.02),
             num_training_steps=self.training_steps,
         )
         return {"optimizer": optimizer, "lr_scheduler": lr_schedule}

@@ -12,8 +12,8 @@ from sklearn.model_selection import train_test_split
 np.random.seed(0)
 
 
-OBJECT_SEP = ';'
-ANNOTATION_SEP = ' '
+OBJECT_SEP = ";"
+ANNOTATION_SEP = " "
 
 
 def rectangle_box(anno):
@@ -49,7 +49,7 @@ def polylabel_box(anno):
     wh = np.abs(box - cxy)
     wh = np.maximum(wh[0], wh[1])
     box = [cxy - wh, wh * 2]  # xmin, ymin, w, h
-    #unary_union([p, c, LineString(box)])
+    # unary_union([p, c, LineString(box)])
     return list(np.asarray(box).flat)
 
 
@@ -62,9 +62,9 @@ def annotation_to_bbox(annotation):
 
     annotation_list = annotation.split(OBJECT_SEP)
     for anno in annotation_list:
-        if anno[0] in ('0', '1'):
+        if anno[0] in ("0", "1"):
             box = rectangle_box(anno)
-        elif anno[0] == '2':
+        elif anno[0] == "2":
             box = polylabel_box(anno)
         else:
             raise RuntimeError(anno[0])
@@ -93,8 +93,7 @@ def main():
     # ori_train_df.dropna(subset=["annotation"], inplace=True)
     # ori_train_df.reset_index(drop=True, inplace=True)
 
-    train_df, val_df = train_test_split(
-        ori_train_df, test_size=0.1, random_state=0)
+    train_df, val_df = train_test_split(ori_train_df, test_size=0.1, random_state=0)
 
     save_pkl(train_df, OBJ_TRAIN_PKL)
     save_pkl(val_df, OBJ_VALID_PKL)

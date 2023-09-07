@@ -24,10 +24,8 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
         b2_y1, b2_y2 = box2[:, 1] - box2[:, 3] / 2, box2[:, 1] + box2[:, 3] / 2
     else:
         # Get the coordinates of bounding boxes
-        b1_x1, b1_y1, b1_x2, b1_y2 = box1[:,
-                                          0], box1[:, 1], box1[:, 2], box1[:, 3]
-        b2_x1, b2_y1, b2_x2, b2_y2 = box2[:,
-                                          0], box2[:, 1], box2[:, 2], box2[:, 3]
+        b1_x1, b1_y1, b1_x2, b1_y2 = box1[:, 0], box1[:, 1], box1[:, 2], box1[:, 3]
+        b2_x1, b2_y1, b2_x2, b2_y2 = box2[:, 0], box2[:, 1], box2[:, 2], box2[:, 3]
 
     # get the corrdinates of the intersection rectangle
     inter_rect_x1 = torch.max(b1_x1, b2_x1)
@@ -35,8 +33,9 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
     inter_rect_x2 = torch.min(b1_x2, b2_x2)
     inter_rect_y2 = torch.min(b1_y2, b2_y2)
     # Intersection area
-    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * \
-        torch.clamp(inter_rect_y2 - inter_rect_y1 + 1, min=0)
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+        inter_rect_y2 - inter_rect_y1 + 1, min=0
+    )
     # Union Area
     b1_area = (b1_x2 - b1_x1 + 1) * (b1_y2 - b1_y1 + 1)
     b2_area = (b2_x2 - b2_x1 + 1) * (b2_y2 - b2_y1 + 1)
@@ -67,8 +66,14 @@ def box_iou(box1, box2):
     area2 = box_area(box2.T)
 
     # inter(N,M) = (rb(N,M,2) - lt(N,M,2)).clamp(0).prod(2)
-    inter = (torch.min(box1[:, None, 2:], box2[:, 2:]) -
-             torch.max(box1[:, None, :2], box2[:, :2])).clamp(0).prod(2)
+    inter = (
+        (
+            torch.min(box1[:, None, 2:], box2[:, 2:])
+            - torch.max(box1[:, None, :2], box2[:, :2])
+        )
+        .clamp(0)
+        .prod(2)
+    )
     # iou = inter / (area1 + area2 - inter)
     return inter / (area1[:, None] + area2 - inter)
 
@@ -99,10 +104,12 @@ def non_max_suppression(prediction, num_classes, conf_thres=0.5, nms_thres=0.4):
             continue
         # Get score and class with highest confidence
         class_conf, class_pred = torch.max(
-            image_pred[:, 5:5 + num_classes], 1,  keepdim=True)
+            image_pred[:, 5 : 5 + num_classes], 1, keepdim=True
+        )
         # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred)
         detections = torch.cat(
-            (image_pred[:, :5], class_conf.float(), class_pred.float()), 1)
+            (image_pred[:, :5], class_conf.float(), class_pred.float()), 1
+        )
         # Iterate through all predicted classes
         unique_labels = detections[:, -1].cpu().unique()
         if prediction.is_cuda:
@@ -111,8 +118,7 @@ def non_max_suppression(prediction, num_classes, conf_thres=0.5, nms_thres=0.4):
             # Get the detections with the particular class
             detections_class = detections[detections[:, -1] == c]
             # Sort the detections by maximum objectness confidence
-            _, conf_sort_index = torch.sort(
-                detections_class[:, 4], descending=True)
+            _, conf_sort_index = torch.sort(detections_class[:, 4], descending=True)
             detections_class = detections_class[conf_sort_index]
             # Perform non-maximum suppression
             max_detections = []
@@ -129,18 +135,21 @@ def non_max_suppression(prediction, num_classes, conf_thres=0.5, nms_thres=0.4):
 
             max_detections = torch.cat(max_detections).data
             # Add max detections to outputs
-            output[image_i] = max_detections if output[image_i] is None else torch.cat(
-                (output[image_i], max_detections))
+            output[image_i] = (
+                max_detections
+                if output[image_i] is None
+                else torch.cat((output[image_i], max_detections))
+            )
 
     return output
 
 
 def get_batch_statistics(outputs, targets, iou_threshold, imsize=224):
-    ''' Compute true positives, predicted scores and predicted labels per sample 
-        :param outputs: List
-        :param targets: bz, 10, 5
-        :output batch_metrics: List
-    '''
+    """Compute true positives, predicted scores and predicted labels per sample
+    :param outputs: List
+    :param targets: bz, 10, 5
+    :output batch_metrics: List
+    """
 
     batch_metrics = []
     for sample_i in range(len(outputs)):
@@ -154,14 +163,18 @@ def get_batch_statistics(outputs, targets, iou_threshold, imsize=224):
         n = len(target_sample)
         if n > 0:
             target_boxes = torch.zeros(n, 4).type_as(target_sample)
-            target_boxes[:, 0] = imsize * \
-                (target_sample[:, 1] - target_sample[:, 3] / 2)
-            target_boxes[:, 1] = imsize * \
-                (target_sample[:, 2] - target_sample[:, 4] / 2)
-            target_boxes[:, 2] = imsize * \
-                (target_sample[:, 1] + target_sample[:, 3] / 2)
-            target_boxes[:, 3] = imsize * \
-                (target_sample[:, 2] + target_sample[:, 4] / 2)
+            target_boxes[:, 0] = imsize * (
+                target_sample[:, 1] - target_sample[:, 3] / 2
+            )
+            target_boxes[:, 1] = imsize * (
+                target_sample[:, 2] - target_sample[:, 4] / 2
+            )
+            target_boxes[:, 2] = imsize * (
+                target_sample[:, 1] + target_sample[:, 3] / 2
+            )
+            target_boxes[:, 3] = imsize * (
+                target_sample[:, 2] + target_sample[:, 4] / 2
+            )
             # target_boxes = target_sample[:, 1:]
             # TODO: if we don't consider labels
             ious = box_iou(pred_boxes, target_boxes)
@@ -171,13 +184,14 @@ def get_batch_statistics(outputs, targets, iou_threshold, imsize=224):
             true_positives = (corrects > 0).float().cpu().numpy()
 
             batch_metrics.append(
-                [true_positives, pred_scores.cpu().numpy(), pred_labels.cpu().numpy()])
+                [true_positives, pred_scores.cpu().numpy(), pred_labels.cpu().numpy()]
+            )
 
     return batch_metrics
 
 
 def ap_per_class(tp, conf, pred_cls, target_cls):
-    """ Compute the average precision, given the recall and precision curves.
+    """Compute the average precision, given the recall and precision curves.
     Source: https://github.com/rafaelpadilla/Object-Detection-Metrics.
     # Arguments
         tp:    True positives (list).
@@ -232,7 +246,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls):
 
 
 def compute_ap(recall, precision):
-    """ Compute the average precision, given the recall and precision curves.
+    """Compute the average precision, given the recall and precision curves.
     Code originally from https://github.com/rbgirshick/py-faster-rcnn.
     # Arguments
         recall:    The recall curve (list).
@@ -283,7 +297,8 @@ if __name__ == "__main__":
     targets = torch.cat([torch.zeros(16, 10, 1), targets], dim=2)
     sample_metrics = get_batch_statistics(batch_preds, targets, 0.5)
     true_positives, pred_scores, pred_labels = [
-        np.concatenate(x, 0) for x in list(zip(*sample_metrics))]
+        np.concatenate(x, 0) for x in list(zip(*sample_metrics))
+    ]
     # labels = [0] * 16 * 100
     # metrics_output = ap_per_class(
     #     true_positives, pred_scores, pred_labels, labels)

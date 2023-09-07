@@ -69,12 +69,6 @@ def main(args):
     print(f"Number of training samples used: {len(train_dataset)}")
     print(f"Total number of training steps: {args.max_steps}")
 
-    # train_dataset = torch2huggingface_dataset(train_dataset)
-    # train_dataset.with_format("torch")
-
-    # val_dataset = torch2huggingface_dataset(val_dataset)
-    # val_dataset.with_format("torch")
-
     # Get dataloaders
     train_dataloader = get_dataloader(
         train_dataset,
@@ -94,11 +88,14 @@ def main(args):
     callbacks = [
         StreamingProgressBar(
             total=args.max_steps // args.num_train_epochs, val_total=args.val_steps
-        ), ]
+        ),
+    ]
     if args.wandb:
         wandb.login(key="b0236e7bef7b6a3789ca4f305406ab358812da3d")
         logger = WandbLogger(
-             project=f"adaptor_pretrain_{args.num_layers}_layers" if not args.project_name else args.project_name,
+            project=f"adaptor_pretrain_{args.num_layers}_layers"
+            if not args.project_name
+            else args.project_name,
             name=f"{args.vision_model}_{args.text_model}_{args.data_pct}",
             log_model="all",
             save_dir=args.output_dir,
@@ -108,9 +105,11 @@ def main(args):
         logger.log_hyperparams(vars(args))
         experiment_dir = logger.experiment.dir
         callbacks += [
-            cb.LearningRateMonitor(logging_interval="step"),               
+            cb.LearningRateMonitor(logging_interval="step"),
             cb.ModelCheckpoint(monitor=f"val_loss", mode="min"),
-            cb.EarlyStopping(monitor="val_loss", patience=10, min_delta=1e-5, mode="min"),
+            cb.EarlyStopping(
+                monitor="val_loss", patience=10, min_delta=1e-5, mode="min"
+            ),
         ]
     else:
         logger = CSVLogger(args.output_dir)

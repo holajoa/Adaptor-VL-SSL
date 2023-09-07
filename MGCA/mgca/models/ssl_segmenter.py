@@ -13,15 +13,16 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 class SSLSegmenter(LightningModule):
-    def __init__(self,
-                 seg_model: nn.Module,
-                 learning_rate: float = 5e-4,
-                 weight_decay: float = 1e-6,
-                 *args,
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        seg_model: nn.Module,
+        learning_rate: float = 5e-4,
+        weight_decay: float = 1e-6,
+        *args,
+        **kwargs,
+    ):
         super().__init__()
-        self.save_hyperparameters(ignore=['seg_model'])
+        self.save_hyperparameters(ignore=["seg_model"])
         self.model = seg_model
         self.loss = MixedLoss(alpha=10)
 
@@ -84,8 +85,7 @@ class SSLSegmenter(LightningModule):
         loss = np.array(loss).mean()
         dice = np.array(dice).mean()
 
-        self.log(f"{split}_dice", dice, on_epoch=True,
-                 logger=True, prog_bar=True)
+        self.log(f"{split}_dice", dice, on_epoch=True, logger=True, prog_bar=True)
 
     def training_epoch_end(self, training_step_outputs):
         return self.shared_epoch_end(training_step_outputs, "train")
@@ -125,7 +125,7 @@ class SSLSegmenter(LightningModule):
             self.model.parameters(),
             lr=self.hparams.learning_rate,
             betas=(0.9, 0.999),
-            weight_decay=self.hparams.weight_decay
+            weight_decay=self.hparams.weight_decay,
         )
 
         return optimizer

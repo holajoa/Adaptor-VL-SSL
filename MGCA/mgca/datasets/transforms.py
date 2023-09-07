@@ -11,13 +11,13 @@ class DataTransforms(object):
             data_transforms = [
                 transforms.RandomCrop(crop_size),
                 transforms.ToTensor(),
-                transforms.Normalize((0.5, 0.5, 0.5), (0.5,  0.5, 0.5))
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ]
         else:
             data_transforms = [
                 transforms.CenterCrop(crop_size),
                 transforms.ToTensor(),
-                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ]
 
         self.data_transforms = transforms.Compose(data_transforms)
@@ -27,7 +27,9 @@ class DataTransforms(object):
 
 
 class DetectionDataTransforms(object):
-    def __init__(self, is_train: bool = True, crop_size: int = 224, jitter_strength: float = 1.):
+    def __init__(
+        self, is_train: bool = True, crop_size: int = 224, jitter_strength: float = 1.0
+    ):
         if is_train:
             self.color_jitter = transforms.ColorJitter(
                 0.8 * jitter_strength,
@@ -42,12 +44,12 @@ class DetectionDataTransforms(object):
 
             data_transforms = [
                 transforms.ToTensor(),
-                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ]
         else:
             data_transforms = [
                 transforms.ToTensor(),
-                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ]
 
         self.data_transforms = transforms.Compose(data_transforms)
@@ -64,12 +66,13 @@ class Moco2Transform(object):
                 [
                     transforms.RandomCrop(crop_size),
                     transforms.RandomApply(
-                        [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                        [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8
+                    ),
                     transforms.RandomGrayscale(p=0.2),
                     transforms.RandomApply([GaussianBlur([0.1, 2.0])], p=0.5),
                     transforms.RandomHorizontalFlip(),
                     transforms.ToTensor(),
-                    transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+                    transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
                 ]
             )
         else:
@@ -77,7 +80,7 @@ class Moco2Transform(object):
                 [
                     transforms.CenterCrop(crop_size),
                     transforms.ToTensor(),
-                    transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+                    transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
                 ]
             )
 

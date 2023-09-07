@@ -19,8 +19,6 @@ import os
 import argparse
 
 
-# SAVED_EMBEDDINGS_DIR = '/vol/bitbucket/jq619/adaptor-thesis/saved_embeddings'
-
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
     "--vision_model", type=str, help="Choose from [resnet-ae, swin-base]"

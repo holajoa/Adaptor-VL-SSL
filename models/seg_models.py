@@ -1,4 +1,5 @@
 """ResNet-UNet Modified from https://github.com/zhoudaxia233/PyTorch-Unet/blob/master/resnet_unet.py"""
+"""ViT Modified from https://github.com/HKU-MedAI/MGCA/blob/main/mgca/models/backbones/transformer_seg.py"""
 
 import torch.nn as nn
 import torch
@@ -23,16 +24,25 @@ def up_conv(in_channels, out_channels):
 
 
 class Resize(nn.Module):
-    def __init__(self, size:Tuple[int]):
+    def __init__(self, size: Tuple[int]):
         super(Resize, self).__init__()
         self.size = size
 
     def forward(self, x):
-        return nn.functional.interpolate(x, size=self.size, mode='bicubic', align_corners=False)
+        return nn.functional.interpolate(
+            x, size=self.size, mode="bicubic", align_corners=False
+        )
 
 
 class ResNetAEUNet(nn.Module):
-    def __init__(self, adaptor, pretrained=False, out_channels=1, freeze_adaptor=True, input_size=224):
+    def __init__(
+        self,
+        adaptor,
+        pretrained=False,
+        out_channels=1,
+        freeze_adaptor=True,
+        input_size=224,
+    ):
         super().__init__()
 
         resnet_ae = xrv.autoencoders.ResNetAE(weights="101-elastic")
@@ -50,15 +60,18 @@ class ResNetAEUNet(nn.Module):
                 nn.ConvTranspose2d(768, 512, kernel_size=3, stride=1, bias=False),
                 nn.ConvTranspose2d(512, 512, kernel_size=3, stride=2, bias=False),
             )
-        elif input_size % 224 == 0 and (log2(input_size // 224)).is_integer() :
+        elif input_size % 224 == 0 and (log2(input_size // 224)).is_integer():
             self.neck = nn.Sequential(
                 nn.ConvTranspose2d(768, 512, kernel_size=3, stride=1, bias=False),
-                nn.ConvTranspose2d(512, 512, kernel_size=3, stride=2, bias=False), 
-                *[nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2, bias=False)]*int(log2(input_size // 224)),
-        )
+                nn.ConvTranspose2d(512, 512, kernel_size=3, stride=2, bias=False),
+                *[nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2, bias=False)]
+                * int(log2(input_size // 224)),
+            )
         else:
-            raise ValueError(f"Unsupported input size {input_size}, only 224, 448 and 896 are supported.")
-        
+            raise ValueError(
+                f"Unsupported input size {input_size}, only 224, 448 and 896 are supported."
+            )
+
         self.up_conv6 = up_conv(512, 512)
         self.conv6 = double_conv(512 + 1024, 512)
         self.up_conv7 = up_conv(512, 256)
@@ -147,7 +160,8 @@ class ResNetAEUNet(nn.Module):
         global_unimodal_features = self.get_global_features(unimodal_features)
         multimodal_features = self.fusion(global_unimodal_features)
         out = self.decode(
-            multimodal_features.unsqueeze(2).unsqueeze(3), encoder_features, 
+            multimodal_features.unsqueeze(2).unsqueeze(3),
+            encoder_features,
         )
 
         if return_dict:
@@ -162,7 +176,9 @@ class ResNetAEUNet(nn.Module):
 
 
 class ViTDecoder(nn.Module):
-    def __init__(self, in_channels, out_channels, features=[512, 256, 128, 64], input_size=224):
+    def __init__(
+        self, in_channels, out_channels, features=[512, 256, 128, 64], input_size=224
+    ):
         super().__init__()
         if input_size == 224:
             self.decoder_0 = nn.Sequential(
@@ -171,47 +187,39 @@ class ViTDecoder(nn.Module):
                 nn.ReLU(inplace=True),
             )
         else:
-            assert input_size in [224, 896], f"Unsupported image size {input_size}, only 224 and 896 are supported."
+            assert input_size in [
+                224,
+                896,
+            ], f"Unsupported image size {input_size}, only 224 and 896 are supported."
             factor = input_size // 224
             self.decoder_0 = nn.Sequential(
-                # nn.Conv2d(in_channels, in_channels, 5, stride=1, padding=0),
-                # nn.BatchNorm2d(in_channels),
-                # nn.ReLU(inplace=True),
-                # nn.Conv2d(in_channels, in_channels, 5, stride=1, padding=0),
-                # nn.BatchNorm2d(in_channels),
-                # nn.ReLU(inplace=True),
                 nn.Conv2d(in_channels, in_channels, 3, stride=1, padding=1),
                 nn.BatchNorm2d(in_channels),
                 nn.ReLU(inplace=True),
-                nn.Upsample(scale_factor=14/16)
-                # nn.AdaptiveAvgPool2d((14*factor, 14*factor)),                
+                nn.Upsample(scale_factor=14 / 16),
             )
         self.decoder_1 = nn.Sequential(
             nn.Conv2d(in_channels, features[0], 3, padding=1),
             nn.BatchNorm2d(features[0]),
             nn.ReLU(inplace=True),
-            # nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Upsample(scale_factor=2),
         )
         self.decoder_2 = nn.Sequential(
             nn.Conv2d(features[0], features[1], 3, padding=1),
             nn.BatchNorm2d(features[1]),
             nn.ReLU(inplace=True),
-            # nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Upsample(scale_factor=2),
         )
         self.decoder_3 = nn.Sequential(
             nn.Conv2d(features[1], features[2], 3, padding=1),
             nn.BatchNorm2d(features[2]),
             nn.ReLU(inplace=True),
-            # nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Upsample(scale_factor=2),
         )
         self.decoder_4 = nn.Sequential(
             nn.Conv2d(features[2], features[3], 3, padding=1),
             nn.BatchNorm2d(features[3]),
             nn.ReLU(inplace=True),
-            # nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Upsample(scale_factor=2),
         )
 
@@ -247,8 +255,10 @@ class DINOv2Segmenter(nn.Module):
         self.encoder = backbone
         self.adaptor = adaptor
         self.decoder = ViTDecoder(
-            in_channels=hidden_dim, out_channels=out_channels, 
-            features=features, input_size=input_size
+            in_channels=hidden_dim,
+            out_channels=out_channels,
+            features=features,
+            input_size=input_size,
         )
 
         self._weights_init()
@@ -278,8 +288,10 @@ class DINOv2Segmenter(nn.Module):
         features = self.encoder(x, is_training=True)["x_norm_patchtokens"]
         multimodal_features = self.adaptor(features)
         batch_size, num_patches, _ = multimodal_features.shape
-        patch_size = int(num_patches ** 0.5)
-        decoder_input = multimodal_features.reshape(batch_size, patch_size, patch_size, self.hidden_dim).permute(0, 3, 1, 2)
+        patch_size = int(num_patches**0.5)
+        decoder_input = multimodal_features.reshape(
+            batch_size, patch_size, patch_size, self.hidden_dim
+        ).permute(0, 3, 1, 2)
         output = self.decoder(decoder_input)
         if return_dict:
             return {

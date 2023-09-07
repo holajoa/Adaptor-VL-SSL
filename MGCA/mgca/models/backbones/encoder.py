@@ -15,10 +15,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 class GlobalEmbedding(nn.Module):
-    def __init__(self,
-                 input_dim: int = 768,
-                 hidden_dim: int = 2048,
-                 output_dim: int = 512) -> None:
+    def __init__(
+        self, input_dim: int = 768, hidden_dim: int = 2048, output_dim: int = 512
+    ) -> None:
         super().__init__()
 
         self.head = nn.Sequential(
@@ -26,7 +25,7 @@ class GlobalEmbedding(nn.Module):
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, output_dim),
-            nn.BatchNorm1d(output_dim, affine=False)  # output layer
+            nn.BatchNorm1d(output_dim, affine=False),  # output layer
         )
 
     def forward(self, x):
@@ -38,13 +37,11 @@ class LocalEmbedding(nn.Module):
         super().__init__()
 
         self.head = nn.Sequential(
-            nn.Conv1d(input_dim, hidden_dim,
-                      kernel_size=1, stride=1, padding=0),
+            nn.Conv1d(input_dim, hidden_dim, kernel_size=1, stride=1, padding=0),
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(inplace=True),
-            nn.Conv1d(hidden_dim, output_dim,
-                      kernel_size=1, stride=1, padding=0),
-            nn.BatchNorm1d(output_dim, affine=False)  # output layer
+            nn.Conv1d(hidden_dim, output_dim, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm1d(output_dim, affine=False),  # output layer
         )
 
     def forward(self, x):
@@ -55,13 +52,14 @@ class LocalEmbedding(nn.Module):
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self,
-                 model_name: str = "resnet_50",
-                 text_feat_dim: int = 768,
-                 output_dim: int = 768,
-                 hidden_dim: int = 2048,
-                 pretrained: bool = True
-                 ):
+    def __init__(
+        self,
+        model_name: str = "resnet_50",
+        text_feat_dim: int = 768,
+        output_dim: int = 768,
+        hidden_dim: int = 2048,
+        pretrained: bool = True,
+    ):
         super(ImageEncoder, self).__init__()
 
         self.model_name = model_name
@@ -75,27 +73,25 @@ class ImageEncoder(nn.Module):
 
             vit_name = model_name[4:]
             self.model, vision_width = create_vit(
-                vit_name, image_size, vit_grad_ckpt, vit_ckpt_layer, 0)
+                vit_name, image_size, vit_grad_ckpt, vit_ckpt_layer, 0
+            )
 
             self.feature_dim = vision_width
 
             checkpoint = torch.hub.load_state_dict_from_url(
                 url="https://dl.fbaipublicfiles.com/deit/deit_base_patch16_224-b5f2ef4d.pth",
-                map_location="cpu", check_hash=True)
+                map_location="cpu",
+                check_hash=True,
+            )
             state_dict = checkpoint["model"]
             msg = self.model.load_state_dict(state_dict, strict=False)
 
-            self.global_embed = GlobalEmbedding(
-                vision_width, hidden_dim, output_dim
-            )
+            self.global_embed = GlobalEmbedding(vision_width, hidden_dim, output_dim)
 
-            self.local_embed = LocalEmbedding(
-                vision_width, hidden_dim, output_dim
-            )
+            self.local_embed = LocalEmbedding(vision_width, hidden_dim, output_dim)
 
         else:
-            model_function = getattr(
-                cnn_backbones, model_name)
+            model_function = getattr(cnn_backbones, model_name)
             self.model, self.feature_dim, self.interm_feature_dim = model_function(
                 pretrained=pretrained
             )
@@ -112,8 +108,7 @@ class ImageEncoder(nn.Module):
             )
 
     def resnet_forward(self, x, get_local=True):
-        x = nn.Upsample(size=(299, 299), mode="bilinear",
-                        align_corners=True)(x)
+        x = nn.Upsample(size=(299, 299), mode="bilinear", align_corners=True)(x)
         x = self.model.conv1(x)  # (batch_size, 64, 150, 150)
         x = self.model.bn1(x)
         x = self.model.relu(x)
@@ -144,12 +139,14 @@ class ImageEncoder(nn.Module):
 
 
 class BertEncoder(nn.Module):
-    def __init__(self,
-                 tokenizer: BertTokenizer = None,
-                 emb_dim: int = 768,
-                 output_dim: int = 128,
-                 hidden_dim: int = 2048,
-                 freeze_bert: bool = True):
+    def __init__(
+        self,
+        tokenizer: BertTokenizer = None,
+        emb_dim: int = 768,
+        output_dim: int = 128,
+        hidden_dim: int = 2048,
+        freeze_bert: bool = True,
+    ):
         super(BertEncoder, self).__init__()
         self.bert_type = "emilyalsentzer/Bio_ClinicalBERT"
         self.last_n_layers = 1
@@ -161,7 +158,8 @@ class BertEncoder(nn.Module):
         # self.max_sent_num = 10
 
         self.config = BertConfig.from_json_file(
-            os.path.join(BASE_DIR, "../../configs/bert_config.json"))
+            os.path.join(BASE_DIR, "../../configs/bert_config.json")
+        )
         self.model = BertModel.from_pretrained(
             self.bert_type,
             config=self.config,
@@ -181,9 +179,11 @@ class BertEncoder(nn.Module):
                 param.requires_grad = False
 
         self.global_embed = GlobalEmbedding(
-            self.embedding_dim, hidden_dim, self.output_dim)
+            self.embedding_dim, hidden_dim, self.output_dim
+        )
         self.local_embed = LocalEmbedding(
-            self.embedding_dim, hidden_dim, self.output_dim)
+            self.embedding_dim, hidden_dim, self.output_dim
+        )
 
     # def aggregate_tokens(self, features, caption_ids):
     #     _, num_layers, num_words, dim = features.shape
@@ -305,11 +305,11 @@ class BertEncoder(nn.Module):
     #     return agg_feats_batch, sentence_feats, sentence_mask, sentences
 
     def aggregate_tokens(self, embeddings, caption_ids, last_layer_attn):
-        '''
+        """
         :param embeddings: bz, 1, 112, 768
         :param caption_ids: bz, 112
         :param last_layer_attn: bz, 111
-        '''
+        """
         _, num_layers, num_words, dim = embeddings.shape
         embeddings = embeddings.permute(0, 2, 1, 3)
         agg_embs_batch = []
@@ -317,7 +317,9 @@ class BertEncoder(nn.Module):
         last_attns = []
 
         # loop over batch
-        for embs, caption_id, last_attn in zip(embeddings, caption_ids, last_layer_attn):
+        for embs, caption_id, last_attn in zip(
+            embeddings, caption_ids, last_layer_attn
+        ):
             agg_embs = []
             token_bank = []
             words = []
@@ -364,7 +366,8 @@ class BertEncoder(nn.Module):
             paddings = paddings.type_as(agg_embs)
             words = words + ["[PAD]"] * padding_size
             last_attns.append(
-                torch.cat([torch.tensor(attns), torch.zeros(padding_size)], dim=0))
+                torch.cat([torch.tensor(attns), torch.zeros(padding_size)], dim=0)
+            )
             agg_embs_batch.append(torch.cat([agg_embs, paddings]))
             sentences.append(words)
 
@@ -376,19 +379,18 @@ class BertEncoder(nn.Module):
         return agg_embs_batch, sentences, last_atten_pt
 
     def forward(self, ids, attn_mask, token_type, get_local=False):
-        outputs = self.model(ids, attn_mask, token_type,
-                             return_dict=True, mode="text")
+        outputs = self.model(ids, attn_mask, token_type, return_dict=True, mode="text")
 
         last_layer_attn = outputs.attentions[-1][:, :, 0, 1:].mean(dim=1)
         all_feat = outputs.last_hidden_state.unsqueeze(1)
 
         if self.agg_tokens:
             all_feat, sents, last_atten_pt = self.aggregate_tokens(
-                all_feat, ids, last_layer_attn)
+                all_feat, ids, last_layer_attn
+            )
             last_atten_pt = last_atten_pt[:, 1:].contiguous()
         else:
-            sents = [[self.idxtoword[w.item()] for w in sent]
-                     for sent in ids]
+            sents = [[self.idxtoword[w.item()] for w in sent] for sent in ids]
 
         if self.last_n_layers == 1:
             all_feat = all_feat[:, 0]
@@ -454,6 +456,7 @@ class BertEncoder(nn.Module):
 if __name__ == "__main__":
     from mgca.datasets.pretrain_dataset import MultimodalPretrainingDataset
     from mgca.datasets.transforms import DataTransforms
+
     transform = DataTransforms(is_train=True)
     dataset = MultimodalPretrainingDataset(split="train", transform=transform)
 
@@ -465,4 +468,5 @@ if __name__ == "__main__":
                 caps["input_ids"],
                 caps["attention_mask"],
                 caps["token_type_ids"],
-                get_local=True)
+                get_local=True,
+            )

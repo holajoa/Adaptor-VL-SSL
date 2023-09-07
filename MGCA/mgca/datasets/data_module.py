@@ -3,7 +3,16 @@ from torch.utils.data import DataLoader
 
 
 class DataModule(pl.LightningDataModule):
-    def __init__(self, dataset, collate_fn, transforms, data_pct, batch_size, num_workers, crop_size=224):
+    def __init__(
+        self,
+        dataset,
+        collate_fn,
+        transforms,
+        data_pct,
+        batch_size,
+        num_workers,
+        crop_size=224,
+    ):
         super().__init__()
 
         self.dataset = dataset
@@ -19,9 +28,10 @@ class DataModule(pl.LightningDataModule):
             transform = self.transforms(True, self.crop_size)
         else:
             transform = None
-        
+
         dataset = self.dataset(
-            split="train", transform=transform, data_pct=self.data_pct)
+            split="train", transform=transform, data_pct=self.data_pct
+        )
 
         return DataLoader(
             dataset,
@@ -39,7 +49,8 @@ class DataModule(pl.LightningDataModule):
         else:
             transform = None
         dataset = self.dataset(
-            split="valid", transform=transform, data_pct=self.data_pct)
+            split="valid", transform=transform, data_pct=self.data_pct
+        )
         return DataLoader(
             dataset,
             pin_memory=True,
@@ -47,7 +58,7 @@ class DataModule(pl.LightningDataModule):
             shuffle=False,
             collate_fn=self.collate_fn,
             batch_size=self.batch_size,
-            num_workers=self.num_workers
+            num_workers=self.num_workers,
         )
 
     def test_dataloader(self):
@@ -56,12 +67,13 @@ class DataModule(pl.LightningDataModule):
         else:
             transform = None
         dataset = self.dataset(
-            split="test", transform=transform, data_pct=self.data_pct)
+            split="test", transform=transform, data_pct=self.data_pct
+        )
         return DataLoader(
             dataset,
             pin_memory=True,
             shuffle=False,
             collate_fn=self.collate_fn,
             batch_size=self.batch_size,
-            num_workers=self.num_workers
+            num_workers=self.num_workers,
         )

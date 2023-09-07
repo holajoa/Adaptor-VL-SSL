@@ -39,7 +39,6 @@ class AdaptorDataModule(pl.LightningDataModule):
             self.train_steps = self._get_num_steps(train_dataset)
             self.val_steps = self._get_num_steps(val_dataset)
 
-            
             self.datasets["train"] = train_dataset
             self.datasets["valid"] = val_dataset
 

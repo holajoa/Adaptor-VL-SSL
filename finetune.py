@@ -21,7 +21,7 @@ import wandb
 def main(args):
     print("I'm running! ")
     seed_everything(args.seed, workers=True)
-    
+
     if args.vision_model not in VISION_PRETRAINED.keys():
         raise ValueError(
             f"Vision model {args.vision_model} not available."
@@ -60,7 +60,6 @@ def main(args):
 
     args.max_steps = data_module.train_steps * args.num_train_epochs
     args.val_steps = data_module.val_steps
-    # print(f"Number of training samples used: {len(data_module.datasets['train'])}")
     print(f"Total number of training steps: {args.max_steps}")
 
     vision_model_config = VISION_PRETRAINED[args.vision_model]
@@ -71,10 +70,15 @@ def main(args):
         vision_pretrained=vision_pretrained,
         retain_head=False,
     )
-    adaptor_ckpt = get_newest_ckpt(args.vision_model, args.text_model, wandb=args.wandb, 
-                                   postfix=args.postfix, project_name=args.pretrain_wandb_project_name)
+    adaptor_ckpt = get_newest_ckpt(
+        args.vision_model,
+        args.text_model,
+        wandb=args.wandb,
+        postfix=args.postfix,
+        project_name=args.pretrain_wandb_project_name,
+    )
     adaptor = Adaptor.load_from_checkpoint(adaptor_ckpt)
-    
+
     model = AdaptorFinetuner(
         backbone=backbone,
         adaptor=adaptor,
@@ -90,13 +94,13 @@ def main(args):
         multilabel=dataset_cfg["multilabel"],
         freeze_adaptor=not args.unfreeze_adaptor,
     )
-    
+
     if args.disable_adaptor:
         model.adaptor = Identity()
         model.linear_layer = SSLEvaluator(
-            n_input=VISION_PRETRAINED[args.vision_model]['vision_output_dim'],
+            n_input=VISION_PRETRAINED[args.vision_model]["vision_output_dim"],
             n_classes=model.num_classes,
-            p=args.dropout, 
+            p=args.dropout,
             n_hidden=args.hidden_dim,
         )
 
@@ -108,8 +112,6 @@ def main(args):
 
     if args.wandb:
         wandb.login(key="b0236e7bef7b6a3789ca4f305406ab358812da3d")
-        # now = datetime.datetime.now(tz.tzlocal())
-        # extension = now.strftime("%Y_%m_%d_%H_%M_%S")
         if not args.project_name:
             args.project_name = "adaptor_finetune"
         logger = WandbLogger(
@@ -147,7 +149,6 @@ def main(args):
 
     trainer = Trainer(
         max_epochs=args.num_train_epochs,
-        # min_epochs=int(args.num_train_epochs * 0.1),
         log_every_n_steps=args.log_every_n_steps,
         check_val_every_n_epoch=args.check_val_every_n_epochs,
         default_root_dir=args.output_dir,
@@ -155,7 +156,6 @@ def main(args):
         enable_progress_bar=False,
         logger=logger,
         deterministic=True,
-        # enable_checkpointing=False,
         **device_kwargs,
     )
     model.training_steps = args.max_steps
@@ -192,7 +192,9 @@ if __name__ == "__main__":
     parser.add_argument("--dummy", action="store_true")
     parser.add_argument("--sweep", action="store_true")
     parser.add_argument("--postfix", type=str, default="")
-    parser.add_argument("--pretrain_wandb_project_name", type=str, default="adaptor pretrain")
+    parser.add_argument(
+        "--pretrain_wandb_project_name", type=str, default="adaptor pretrain"
+    )
     parser.add_argument("--disable_adaptor", action="store_true")
     args = parser.parse_args()
 

@@ -24,7 +24,7 @@ class ResNetDetector(nn.Module):
         x = self.model.maxpool(x)
 
         x = self.model.layer1(x)
-        out3 = self.model.layer2(x)   # bz, 512, 28
+        out3 = self.model.layer2(x)  # bz, 512, 28
         out4 = self.model.layer3(out3)
         out5 = self.model.layer4(out4)
 

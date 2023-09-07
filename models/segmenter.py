@@ -1,4 +1,4 @@
-"""Copied from mgca/models/ssl_segmenter.py"""
+"""Modified from https://github.com/HKU-MedAI/MGCA/blob/main/mgca/models/ssl_segmenter.py"""
 
 import os
 
@@ -23,7 +23,7 @@ class AdaptorSegmenter(LightningModule):
         learning_rate: float = 5e-4,
         weight_decay: float = 1e-6,
         alpha: float = 10,
-        modified_dice_loss:bool = True, 
+        modified_dice_loss: bool = True,
         *args,
         **kwargs,
     ):
@@ -41,29 +41,6 @@ class AdaptorSegmenter(LightningModule):
         loss = self.loss(logit, y)
         prob = torch.sigmoid(logit)
         dice = self.get_dice(prob, y)
-
-        # if batch_idx == 0:
-        #     img = batch[0][0].cpu().numpy()
-        #     mask = batch[1][0].cpu().numpy()
-        #     mask = np.stack([mask, mask, mask])
-
-        #     layered = 0.6 * mask + 0.4 * img
-        #     img = img.transpose((1, 2, 0))
-        #     mask = mask.transpose((1, 2, 0))
-        #     layered = layered.transpose((1, 2, 0))
-
-        # self.logger.experiment.log(
-        #     {"input_image": [wandb.Image(img, caption="input_image")]}
-        # )
-        # self.logger.experiment.log(
-        #     {"mask": [wandb.Image(mask, caption="mask")]})
-        # self.logger.experiment.log(
-        #     {"layered": [wandb.Image(layered, caption="layered")]}
-        # )
-        # self.logger.experiment.log(
-        #     {"pred": [wandb.Image(prob[0], caption="pred")]})
-
-        # log_iter_loss = True if split == 'train' else False
         self.log(
             f"{split}_loss",
             loss.item(),
@@ -132,7 +109,6 @@ class AdaptorSegmenter(LightningModule):
             betas=(0.9, 0.999),
             weight_decay=self.hparams.weight_decay,
         )
-        # return optimizer
         lr_schedule = CosineAnnealingWarmRestarts(
             optimizer=optimizer,
             T_0=100,
@@ -140,7 +116,6 @@ class AdaptorSegmenter(LightningModule):
             eta_min=1e-8,
         )
         return {"optimizer": optimizer, "lr_scheduler": lr_schedule}
-        
 
     @staticmethod
     def num_training_steps(trainer, dm) -> int:

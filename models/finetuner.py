@@ -72,8 +72,12 @@ class AdaptorFinetuner(LightningModule):
         self.model_name = model_name
         self.text_model_name = text_model_name
         if self.text_model_name is not None:
-            store_path = "/vol/bitbucket/jq619/adaptor-thesis/saved_embeddings/dummy_text_embeds"
-            self.dummy_text = torch.from_numpy(torch.load(os.path.join(store_path, self.text_model_name + ".pt")))
+            store_path = (
+                "/vol/bitbucket/jq619/adaptor-thesis/saved_embeddings/dummy_text_embeds"
+            )
+            self.dummy_text = torch.from_numpy(
+                torch.load(os.path.join(store_path, self.text_model_name + ".pt"))
+            )
         self.binary = binary
         self.multilabel = multilabel
 
@@ -157,7 +161,9 @@ class AdaptorFinetuner(LightningModule):
         if self.text_model_name is not None:
             batch_size = feats.size(0)
             batch_text_dummy = self.dummy_text.repeat(batch_size, 1).to(feats.device)
-            _, _, feats, _ = self.adaptor(feats, batch_text_dummy, return_loss=False, return_dict=False)
+            _, _, feats, _ = self.adaptor(
+                feats, batch_text_dummy, return_loss=False, return_dict=False
+            )
         else:
             feats = self.adaptor(feats)
         logits = self.linear_layer(feats)
@@ -169,14 +175,6 @@ class AdaptorFinetuner(LightningModule):
             loss = F.cross_entropy(logits.float(), y.long())
 
         return loss, logits, y
-
-    # def configure_optimizers(self):
-    #     optimizer = torch.optim.AdamW(
-    #         self.linear_layer.parameters(),
-    #         lr=self.learning_rate,
-    #         betas=(0.9, 0.999),
-    #         weight_decay=self.weight_decay
-    #     )
 
     def configure_optimizers(self):
         optimizer = AdamW(

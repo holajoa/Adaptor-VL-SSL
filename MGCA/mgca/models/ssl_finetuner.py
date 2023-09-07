@@ -8,37 +8,38 @@ from torchmetrics import AUROC, Accuracy
 
 
 class SSLFineTuner(LightningModule):
-    def __init__(self,
-                 backbone: nn.Module,
-                 model_name: str = "resnet_50",
-                 in_features: int = 2048,
-                 num_classes: int = 5,
-                 hidden_dim: Optional[int] = None,
-                 dropout: float = 0.0,
-                 learning_rate: float = 5e-4,
-                 weight_decay: float = 1e-6,
-                 multilabel: bool = True,
-                 *args,
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        backbone: nn.Module,
+        model_name: str = "resnet_50",
+        in_features: int = 2048,
+        num_classes: int = 5,
+        hidden_dim: Optional[int] = None,
+        dropout: float = 0.0,
+        learning_rate: float = 5e-4,
+        weight_decay: float = 1e-6,
+        multilabel: bool = True,
+        *args,
+        **kwargs
+    ):
         super().__init__()
 
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         if multilabel:
             self.train_auc = AUROC(num_classes=num_classes)
-            self.val_auc = AUROC(num_classes=num_classes,
-                                 compute_on_step=False)
-            self.test_auc = AUROC(num_classes=num_classes,
-                                  compute_on_step=False)
+            self.val_auc = AUROC(num_classes=num_classes, compute_on_step=False)
+            self.test_auc = AUROC(num_classes=num_classes, compute_on_step=False)
         else:
             self.train_acc = Accuracy(num_classes=num_classes, topk=1)
             self.val_acc = Accuracy(
-                num_classes=num_classes, topk=1, compute_on_step=False)
+                num_classes=num_classes, topk=1, compute_on_step=False
+            )
             self.test_acc = Accuracy(
-                num_classes=num_classes, topk=1, compute_on_step=False)
+                num_classes=num_classes, topk=1, compute_on_step=False
+            )
 
-        self.save_hyperparameters(ignore=['backbone'])
+        self.save_hyperparameters(ignore=["backbone"])
 
         self.backbone = backbone
         for param in self.backbone.parameters():
@@ -47,7 +48,8 @@ class SSLFineTuner(LightningModule):
         self.multilabel = multilabel
 
         self.linear_layer = SSLEvaluator(
-            n_input=in_features, n_classes=num_classes, p=dropout, n_hidden=hidden_dim)
+            n_input=in_features, n_classes=num_classes, p=dropout, n_hidden=hidden_dim
+        )
 
     def on_train_batch_start(self, batch, batch_idx) -> None:
         self.backbone.eval()
@@ -58,13 +60,11 @@ class SSLFineTuner(LightningModule):
         if self.multilabel:
             auc = self.train_auc(torch.sigmoid(logits).float(), y.long())
             self.log("train_auc_step", auc, prog_bar=True, sync_dist=True)
-            self.log("train_auc_epoch", self.train_auc,
-                     prog_bar=True, sync_dist=True)
+            self.log("train_auc_epoch", self.train_auc, prog_bar=True, sync_dist=True)
         else:
             acc = self.train_acc(F.softmax(logits, dim=-1).float(), y.long())
             self.log("train_acc_step", acc, prog_bar=True, sync_dist=True)
-            self.log("train_acc_epoch", self.train_acc,
-                     prog_bar=True, sync_dist=True)
+            self.log("train_acc_epoch", self.train_acc, prog_bar=True, sync_dist=True)
 
         return loss
 
@@ -73,10 +73,14 @@ class SSLFineTuner(LightningModule):
         self.log("val_loss", loss, prog_bar=True, sync_dist=True)
         if self.multilabel:
             self.val_auc(torch.sigmoid(logits).float(), y.long())
-            self.log("val_auc", self.val_auc, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log(
+                "val_auc", self.val_auc, on_epoch=True, prog_bar=True, sync_dist=True
+            )
         else:
             self.val_acc(F.softmax(logits, dim=-1).float(), y.long())
-            self.log("val_acc", self.val_acc, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log(
+                "val_acc", self.val_acc, on_epoch=True, prog_bar=True, sync_dist=True
+            )
 
         return loss
 
@@ -103,8 +107,7 @@ class SSLFineTuner(LightningModule):
         feats = feats.view(feats.size(0), -1)
         logits = self.linear_layer(feats)
         if self.multilabel:
-            loss = F.binary_cross_entropy_with_logits(
-                logits.float(), y.float())
+            loss = F.binary_cross_entropy_with_logits(logits.float(), y.float())
         else:
             y = y.squeeze()
             loss = F.cross_entropy(logits.float(), y.long())
@@ -116,7 +119,7 @@ class SSLFineTuner(LightningModule):
             self.linear_layer.parameters(),
             lr=self.learning_rate,
             betas=(0.9, 0.999),
-            weight_decay=self.weight_decay
+            weight_decay=self.weight_decay,
         )
 
         # lr_scheduler = CosineAnnealingWarmupRestarts(
@@ -154,9 +157,7 @@ class SSLEvaluator(nn.Module):
         self.n_hidden = n_hidden
         if self.n_hidden is None:
             self.block_forward = nn.Sequential(
-                Flatten(),
-                nn.Dropout(p=p),
-                nn.Linear(n_input, n_classes)
+                Flatten(), nn.Dropout(p=p), nn.Linear(n_input, n_classes)
             )
         else:
             self.block_forward = nn.Sequential(
@@ -166,7 +167,7 @@ class SSLEvaluator(nn.Module):
                 nn.BatchNorm1d(n_hidden),
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=p),
-                nn.Linear(n_hidden, n_classes)
+                nn.Linear(n_hidden, n_classes),
             )
 
     def forward(self, x):

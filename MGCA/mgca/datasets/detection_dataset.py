@@ -14,7 +14,9 @@ np.random.seed(42)
 
 
 class RSNADetectionDataset(BaseImageDataset):
-    def __init__(self, split="train", transform=None, data_pct=1., imsize=224, max_objects=10):
+    def __init__(
+        self, split="train", transform=None, data_pct=1.0, imsize=224, max_objects=10
+    ):
         super().__init__(split, transform)
         if not os.path.exists(RSNA_DATA_DIR):
             raise RuntimeError(f"{RSNA_DATA_DIR} does not exist!")
@@ -37,8 +39,8 @@ class RSNADetectionDataset(BaseImageDataset):
         for i in range(len(filenames)):
             bbox = bboxs[i]
             new_bbox = bbox.copy()
-            new_bbox[:, 0] = (bbox[:, 0] + bbox[:, 2]) / 2.
-            new_bbox[:, 1] = (bbox[:, 1] + bbox[:, 3]) / 2.
+            new_bbox[:, 0] = (bbox[:, 0] + bbox[:, 2]) / 2.0
+            new_bbox[:, 1] = (bbox[:, 1] + bbox[:, 3]) / 2.0
             new_bbox[:, 2] = bbox[:, 2] - bbox[:, 0]
             new_bbox[:, 3] = bbox[:, 3] - bbox[:, 1]
             n = new_bbox.shape[0]
@@ -62,13 +64,11 @@ class RSNADetectionDataset(BaseImageDataset):
     def __getitem__(self, index):
         filename = self.filenames_list[index]
         img_path = RSNA_IMG_DIR / filename
-        x = read_from_dicom(
-            img_path, None, None)
+        x = read_from_dicom(img_path, None, None)
 
         x = cv2.cvtColor(np.asarray(x), cv2.COLOR_BGR2RGB)
         h, w, _ = x.shape
-        x = cv2.resize(x, (self.imsize, self.imsize),
-                       interpolation=cv2.INTER_LINEAR)
+        x = cv2.resize(x, (self.imsize, self.imsize), interpolation=cv2.INTER_LINEAR)
         x = Image.fromarray(x, "RGB")
 
         if self.transform:
@@ -80,16 +80,15 @@ class RSNADetectionDataset(BaseImageDataset):
         y[:, 2] /= h
         y[:, 4] /= h
 
-        sample = {
-            "imgs": x,
-            "labels": y
-        }
+        sample = {"imgs": x, "labels": y}
 
         return sample
 
 
 class OBJCXRDetectionDataset(BaseImageDataset):
-    def __init__(self, split="train", transform=None, data_pct=1., imsize=224, max_objects=20):
+    def __init__(
+        self, split="train", transform=None, data_pct=1.0, imsize=224, max_objects=20
+    ):
         # TODO: resize in detection is different from that in classification.
         super().__init__(split, transform)
         if not os.path.exists(OBJ_DATA_DIR):
@@ -153,8 +152,7 @@ class OBJCXRDetectionDataset(BaseImageDataset):
         x = cv2.imread(str(img_path))
         h, w, _ = x.shape
         x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
-        x = cv2.resize(x, (self.imsize, self.imsize),
-                       interpolation=cv2.INTER_LINEAR)
+        x = cv2.resize(x, (self.imsize, self.imsize), interpolation=cv2.INTER_LINEAR)
 
         if self.transform:
             x = self.transform(x)
@@ -165,10 +163,7 @@ class OBJCXRDetectionDataset(BaseImageDataset):
         y[:, 2] /= h
         y[:, 4] /= h
 
-        sample = {
-            "imgs": x,
-            "labels": y
-        }
+        sample = {"imgs": x, "labels": y}
 
         return sample
 

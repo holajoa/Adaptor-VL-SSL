@@ -47,8 +47,7 @@ def preprocess_chexpert_data():
 
     df_200 = preprocess_chexpert_5x200_data()
     df = df[~df[CHEXPERT_PATH_COL].isin(df_200[CHEXPERT_PATH_COL])]
-    valid_ids = np.random.choice(
-        len(df), size=CHEXPERT_VALID_NUM, replace=False)
+    valid_ids = np.random.choice(len(df), size=CHEXPERT_VALID_NUM, replace=False)
     valid_df = df.iloc[valid_ids]
     train_df = df.drop(valid_ids, errors="ignore")
 

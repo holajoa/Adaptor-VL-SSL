@@ -16,8 +16,15 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 class MultimodalPretrainingDataset(data.Dataset):
-    def __init__(self, split="train", transform=None, data_pct=1.0,
-                 imsize=256, max_words=112, sent_num=3):
+    def __init__(
+        self,
+        split="train",
+        transform=None,
+        data_pct=1.0,
+        imsize=256,
+        max_words=112,
+        sent_num=3,
+    ):
         super().__init__()
         if not os.path.exists(MIMIC_CXR_DATA_DIR):
             raise RuntimeError(f"{MIMIC_CXR_DATA_DIR} does not exist!")
@@ -27,28 +34,28 @@ class MultimodalPretrainingDataset(data.Dataset):
         self.df = pd.read_csv(MIMIC_CXR_MASTER_CSV)
         self.df = self.df[self.df["ViewPosition"].isin(["PA", "AP"])]
         self.df[MIMIC_CXR_PATH_COL] = self.df[MIMIC_CXR_PATH_COL].apply(
-            lambda x: os.path.join(MIMIC_CXR_DATA_DIR, "/".join(x.split("/")[1:])))
+            lambda x: os.path.join(MIMIC_CXR_DATA_DIR, "/".join(x.split("/")[1:]))
+        )
 
         # load studies and study to text mapping
         self.filenames, self.path2sent = self.load_text_data(split)
-        
+
         self.df = self.df[self.df[MIMIC_CXR_SPLIT_COL] == split]
         if data_pct != 1.0 and split == "train":
             self.df = self.df.sample(frac=data_pct, random_state=42)
         self.df.reset_index(drop=True, inplace=True)
-        
+
         self.tokenizer = BertTokenizer.from_pretrained(
-            "emilyalsentzer/Bio_ClinicalBERT")
+            "emilyalsentzer/Bio_ClinicalBERT"
+        )
         self.max_words = max_words
 
     def load_text_data(self, split):
         # get study to captions mapping
         # TODO: check this
-        filepath = os.path.join(
-            BASE_DIR, "../../data/captions.pickle")
+        filepath = os.path.join(BASE_DIR, "../../data/captions.pickle")
         if not os.path.isfile(filepath):
-            print(
-                f"Caption file {filepath} does not exit. Creating captions...")
+            print(f"Caption file {filepath} does not exit. Creating captions...")
             path2sent = self.create_path_2_sent_mapping()
             with open(filepath, "wb") as f:
                 pickle.dump(path2sent, f, protocol=2)
@@ -184,8 +191,7 @@ def multimodal_collate_fn(batch):
     attention = torch.stack(attention).squeeze()
 
     # sort and add to dictionary
-    sorted_cap_lens, sorted_cap_indices = torch.sort(
-        torch.tensor(cap_len), 0, True)
+    sorted_cap_lens, sorted_cap_indices = torch.sort(torch.tensor(cap_len), 0, True)
 
     path = np.array(path)
 
@@ -195,13 +201,14 @@ def multimodal_collate_fn(batch):
         "attention_mask": attention[sorted_cap_indices],
         "imgs": imgs[sorted_cap_indices],
         "cap_lens": sorted_cap_lens,
-        "path": path[sorted_cap_indices]
+        "path": path[sorted_cap_indices],
     }
     return return_dict
 
 
 if __name__ == "__main__":
     from mgca.datasets.transforms import DataTransforms
+
     transform = DataTransforms(is_train=True)
     dataset = MultimodalPretrainingDataset(split="train", transform=transform)
     data = dataset[0]

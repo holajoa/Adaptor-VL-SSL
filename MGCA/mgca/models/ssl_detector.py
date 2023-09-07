@@ -12,28 +12,28 @@ from pytorch_lightning import LightningModule
 
 
 class SSLDetector(LightningModule):
-    def __init__(self,
-                 img_encoder: nn.Module,
-                 learning_rate: float = 5e-4,
-                 weight_decay: float = 1e-6,
-                 imsize: int = 224,
-                 conf_thres: float = 0.5,
-                 iou_thres: List = [0.4, 0.45, 0.5,
-                                    0.55, 0.6, 0.65, 0.7, 0.75],
-                 nms_thres: float = 0.5,
-                 *args,
-                 **kwargs):
+    def __init__(
+        self,
+        img_encoder: nn.Module,
+        learning_rate: float = 5e-4,
+        weight_decay: float = 1e-6,
+        imsize: int = 224,
+        conf_thres: float = 0.5,
+        iou_thres: List = [0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75],
+        nms_thres: float = 0.5,
+        *args,
+        **kwargs,
+    ):
         super().__init__()
-        self.save_hyperparameters(ignore=['img_encoder'])
+        self.save_hyperparameters(ignore=["img_encoder"])
         self.model = ModelMain(img_encoder)
         self.yolo_losses = []
         for i in range(3):
-            self.yolo_losses.append(YOLOLoss(self.model.anchors[i], self.model.classes,
-                                             (imsize, imsize)))
-        self.val_map = MeanAveragePrecision(
-            iou_thresholds=self.hparams.iou_thres)
-        self.test_map = MeanAveragePrecision(
-            iou_thresholds=self.hparams.iou_thres)
+            self.yolo_losses.append(
+                YOLOLoss(self.model.anchors[i], self.model.classes, (imsize, imsize))
+            )
+        self.val_map = MeanAveragePrecision(iou_thresholds=self.hparams.iou_thres)
+        self.test_map = MeanAveragePrecision(iou_thresholds=self.hparams.iou_thres)
 
     def shared_step(self, batch, batch_idx, split):
         outputs = self.model(batch["imgs"])
@@ -48,29 +48,35 @@ class SSLDetector(LightningModule):
         losses = [sum(l) for l in losses]
         loss = losses[0]
 
-        self.log(f"{split}_loss", loss, on_epoch=True,
-                 prog_bar=True, sync_dist=True)
+        self.log(f"{split}_loss", loss, on_epoch=True, prog_bar=True, sync_dist=True)
 
         if split != "train":
             output_list = []
             for i in range(3):
                 output_list.append(self.yolo_losses[i](outputs[i]))
             output = torch.cat(output_list, 1)
-            output = non_max_suppression(output, self.model.classes,
-                                         conf_thres=self.hparams.conf_thres,
-                                         nms_thres=self.hparams.nms_thres)
+            output = non_max_suppression(
+                output,
+                self.model.classes,
+                conf_thres=self.hparams.conf_thres,
+                nms_thres=self.hparams.nms_thres,
+            )
 
             targets = batch["labels"].clone()
             # cxcywh -> xyxy
             h, w = batch["imgs"].shape[2:]
-            targets[:, :, 1] = (batch["labels"][..., 1] -
-                                batch["labels"][..., 3] / 2) * w
-            targets[:, :, 2] = (batch["labels"][..., 2] -
-                                batch["labels"][..., 4] / 2) * h
-            targets[:, :, 3] = (batch["labels"][..., 1] +
-                                batch["labels"][..., 3] / 2) * w
-            targets[:, :, 4] = (batch["labels"][..., 2] +
-                                batch["labels"][..., 4] / 2) * h
+            targets[:, :, 1] = (
+                batch["labels"][..., 1] - batch["labels"][..., 3] / 2
+            ) * w
+            targets[:, :, 2] = (
+                batch["labels"][..., 2] - batch["labels"][..., 4] / 2
+            ) * h
+            targets[:, :, 3] = (
+                batch["labels"][..., 1] + batch["labels"][..., 3] / 2
+            ) * w
+            targets[:, :, 4] = (
+                batch["labels"][..., 2] + batch["labels"][..., 4] / 2
+            ) * h
 
             sample_preds, sample_targets = [], []
             for i in range(targets.shape[0]):
@@ -81,16 +87,13 @@ class SSLDetector(LightningModule):
                 filtered_target = target[target[:, 3] > 0]
                 if filtered_target.shape[0] > 0:
                     sample_target = dict(
-                        boxes=filtered_target[:, 1:],
-                        labels=filtered_target[:, 0]
+                        boxes=filtered_target[:, 1:], labels=filtered_target[:, 0]
                     )
                     sample_targets.append(sample_target)
 
                     out = output[i]
                     sample_pred = dict(
-                        boxes=out[:, :4],
-                        scores=out[:, 4],
-                        labels=out[:, 6]
+                        boxes=out[:, :4], scores=out[:, 4], labels=out[:, 6]
                     )
 
                     sample_preds.append(sample_pred)
@@ -113,14 +116,12 @@ class SSLDetector(LightningModule):
 
     def validation_epoch_end(self, validation_step_outputs):
         map = self.val_map.compute()["map"]
-        self.log("val_mAP", map, prog_bar=True,
-                 on_epoch=True, sync_dist=True)
+        self.log("val_mAP", map, prog_bar=True, on_epoch=True, sync_dist=True)
         self.val_map.reset()
 
     def test_epoch_end(self, test_step_outputs):
         map = self.test_map.compute()["map"]
-        self.log("test_mAP", map, prog_bar=True,
-                 on_epoch=True, sync_dist=True)
+        self.log("test_mAP", map, prog_bar=True, on_epoch=True, sync_dist=True)
         self.test_map.reset()
 
     def configure_optimizers(self):
@@ -128,7 +129,7 @@ class SSLDetector(LightningModule):
             self.model.parameters(),
             lr=self.hparams.learning_rate,
             betas=(0.9, 0.999),
-            weight_decay=self.hparams.weight_decay
+            weight_decay=self.hparams.weight_decay,
         )
 
         return optimizer
@@ -151,54 +152,80 @@ class ModelMain(nn.Module):
         super(ModelMain, self).__init__()
         self.training = is_training
         self.backbone = backbone
-        self.anchors = torch.tensor([
-            [[116, 90], [156, 198], [373, 326]],
-            [[30, 61], [62, 45], [59, 119]],
-            [[10, 13], [16, 30], [33, 23]]
-        ]) * 224 / 416
+        self.anchors = (
+            torch.tensor(
+                [
+                    [[116, 90], [156, 198], [373, 326]],
+                    [[30, 61], [62, 45], [59, 119]],
+                    [[10, 13], [16, 30], [33, 23]],
+                ]
+            )
+            * 224
+            / 416
+        )
         self.classes = 1
 
         _out_filters = self.backbone.filters
         #  embedding0
         final_out_filter0 = len(self.anchors[0]) * (5 + self.classes)
         self.embedding0 = self._make_embedding(
-            [512, 1024], _out_filters[-1], final_out_filter0)
+            [512, 1024], _out_filters[-1], final_out_filter0
+        )
         #  embedding1
         final_out_filter1 = len(self.anchors[1]) * (5 + self.classes)
         self.embedding1_cbl = self._make_cbl(512, 256, 1)
-        self.embedding1_upsample = nn.Upsample(
-            scale_factor=2, mode='nearest')
+        self.embedding1_upsample = nn.Upsample(scale_factor=2, mode="nearest")
         self.embedding1 = self._make_embedding(
-            [256, 512], _out_filters[-2] + 256, final_out_filter1)
+            [256, 512], _out_filters[-2] + 256, final_out_filter1
+        )
         #  embedding2
         final_out_filter2 = len(self.anchors[2]) * (5 + self.classes)
         self.embedding2_cbl = self._make_cbl(256, 128, 1)
-        self.embedding2_upsample = nn.Upsample(
-            scale_factor=2, mode='nearest')
+        self.embedding2_upsample = nn.Upsample(scale_factor=2, mode="nearest")
         self.embedding2 = self._make_embedding(
-            [128, 256], _out_filters[-3] + 128, final_out_filter2)
+            [128, 256], _out_filters[-3] + 128, final_out_filter2
+        )
 
     def _make_cbl(self, _in, _out, ks):
-        ''' cbl = conv + batch_norm + leaky_relu
-        '''
+        """cbl = conv + batch_norm + leaky_relu"""
         pad = (ks - 1) // 2 if ks else 0
-        return nn.Sequential(OrderedDict([
-            ("conv", nn.Conv2d(_in, _out, kernel_size=ks,
-             stride=1, padding=pad, bias=False)),
-            ("bn", nn.BatchNorm2d(_out)),
-            ("relu", nn.LeakyReLU(0.1)),
-        ]))
+        return nn.Sequential(
+            OrderedDict(
+                [
+                    (
+                        "conv",
+                        nn.Conv2d(
+                            _in, _out, kernel_size=ks, stride=1, padding=pad, bias=False
+                        ),
+                    ),
+                    ("bn", nn.BatchNorm2d(_out)),
+                    ("relu", nn.LeakyReLU(0.1)),
+                ]
+            )
+        )
 
     def _make_embedding(self, filters_list, in_filters, out_filter):
-        m = nn.ModuleList([
-            self._make_cbl(in_filters, filters_list[0], 1),
-            self._make_cbl(filters_list[0], filters_list[1], 3),
-            self._make_cbl(filters_list[1], filters_list[0], 1),
-            self._make_cbl(filters_list[0], filters_list[1], 3),
-            self._make_cbl(filters_list[1], filters_list[0], 1),
-            self._make_cbl(filters_list[0], filters_list[1], 3)])
-        m.add_module("conv_out", nn.Conv2d(filters_list[1], out_filter, kernel_size=1,
-                                           stride=1, padding=0, bias=True))
+        m = nn.ModuleList(
+            [
+                self._make_cbl(in_filters, filters_list[0], 1),
+                self._make_cbl(filters_list[0], filters_list[1], 3),
+                self._make_cbl(filters_list[1], filters_list[0], 1),
+                self._make_cbl(filters_list[0], filters_list[1], 3),
+                self._make_cbl(filters_list[1], filters_list[0], 1),
+                self._make_cbl(filters_list[0], filters_list[1], 3),
+            ]
+        )
+        m.add_module(
+            "conv_out",
+            nn.Conv2d(
+                filters_list[1],
+                out_filter,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                bias=True,
+            ),
+        )
         return m
 
     def forward(self, x):
@@ -208,6 +235,7 @@ class ModelMain(nn.Module):
                 if i == 4:
                     out_branch = _in
             return _in, out_branch
+
         #  backbone
         x2, x1, x0 = self.backbone(x)
 
@@ -236,8 +264,7 @@ class ModelMain(nn.Module):
 if __name__ == "__main__":
     model = ModelMain()
 
-    datamodule = DataModule(RSNADetectionDataset, None, DataTransforms,
-                            0.1, 32, 1, 224)
+    datamodule = DataModule(RSNADetectionDataset, None, DataTransforms, 0.1, 32, 1, 224)
 
     for batch in datamodule.train_dataloader():
         break

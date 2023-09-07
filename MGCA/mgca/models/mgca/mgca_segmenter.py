@@ -6,13 +6,15 @@ import segmentation_models_pytorch as smp
 import torch
 from dateutil import tz
 from pytorch_lightning import Trainer, seed_everything
-from pytorch_lightning.callbacks import (EarlyStopping, LearningRateMonitor,
-                                         ModelCheckpoint)
+from pytorch_lightning.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
 from pytorch_lightning.loggers import WandbLogger
 
 from mgca.datasets.data_module import DataModule
-from mgca.datasets.segmentation_dataset import (RSNASegmentDataset,
-                                                SIIMImageDataset)
+from mgca.datasets.segmentation_dataset import RSNASegmentDataset, SIIMImageDataset
 from mgca.models.backbones.transformer_seg import SETRModel
 from mgca.models.mgca.mgca_module import MGCA
 from mgca.models.ssl_segmenter import SSLSegmenter
@@ -24,12 +26,15 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def cli_main():
-    parser = ArgumentParser(
-        "Finetuning of semantic segmentation task for MGCA")
-    parser.add_argument("--base_model", type=str,
-                        default="resnet50", help="resnet50 or vit")
-    parser.add_argument("--ckpt_path", type=str,
-                        default="/home/r15user2/Documents/MGCA/checkpoints/mgca/resnet_50.ckpt")
+    parser = ArgumentParser("Finetuning of semantic segmentation task for MGCA")
+    parser.add_argument(
+        "--base_model", type=str, default="resnet50", help="resnet50 or vit"
+    )
+    parser.add_argument(
+        "--ckpt_path",
+        type=str,
+        default="/home/r15user2/Documents/MGCA/checkpoints/mgca/resnet_50.ckpt",
+    )
     parser.add_argument("--dataset", type=str, default="siim")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--batch_size", type=int, default=8)
@@ -46,13 +51,23 @@ def cli_main():
     seed_everything(args.seed)
 
     if args.dataset == "siim":
-        datamodule = DataModule(SIIMImageDataset, None,
-                                None, args.data_pct,
-                                args.batch_size, args.num_workers)
+        datamodule = DataModule(
+            SIIMImageDataset,
+            None,
+            None,
+            args.data_pct,
+            args.batch_size,
+            args.num_workers,
+        )
     elif args.dataset == "rsna":
-        datamodule = DataModule(RSNASegmentDataset, None,
-                                None, args.data_pct,
-                                args.batch_size, args.num_workers)
+        datamodule = DataModule(
+            RSNASegmentDataset,
+            None,
+            None,
+            args.data_pct,
+            args.batch_size,
+            args.num_workers,
+        )
 
     mgca = MGCA.load_from_checkpoint(args.ckpt_path)
     encoder = mgca.img_encoder_q.model
@@ -65,7 +80,7 @@ def cli_main():
             hidden_size=768,
             num_hidden_layers=12,
             num_attention_heads=12,
-            decode_features=[512, 256, 128, 64]
+            decode_features=[512, 256, 128, 64],
         )
         args.seg_model.encoder_2d.bert_model = encoder
 
@@ -75,7 +90,8 @@ def cli_main():
     elif args.base_model == "resnet50":
         # FIXME: fix this later
         args.seg_model = smp.Unet(
-            args.base_model, encoder_weights=None, activation=None)
+            args.base_model, encoder_weights=None, activation=None
+        )
 
         if args.ckpt_path:
             ckpt = torch.load(args.ckpt_path)
@@ -99,31 +115,36 @@ def cli_main():
     # get current time
     now = datetime.datetime.now(tz.tzlocal())
     extension = now.strftime("%Y_%m_%d_%H_%M_%S")
-    ckpt_dir = os.path.join(
-        BASE_DIR, f"../../../data/ckpts/segmentation/{extension}")
+    ckpt_dir = os.path.join(BASE_DIR, f"../../../data/ckpts/segmentation/{extension}")
     os.makedirs(ckpt_dir, exist_ok=True)
     callbacks = [
         LearningRateMonitor(logging_interval="step"),
-        ModelCheckpoint(monitor="val_loss", dirpath=ckpt_dir,
-                        save_last=True, mode="min", save_top_k=5),
-        EarlyStopping(monitor="val_loss", min_delta=0.,
-                      patience=10, verbose=False, mode="min")
+        ModelCheckpoint(
+            monitor="val_loss",
+            dirpath=ckpt_dir,
+            save_last=True,
+            mode="min",
+            save_top_k=5,
+        ),
+        EarlyStopping(
+            monitor="val_loss", min_delta=0.0, patience=10, verbose=False, mode="min"
+        ),
     ]
-    logger_dir = os.path.join(
-        BASE_DIR, f"../../../data")
+    logger_dir = os.path.join(BASE_DIR, f"../../../data")
     os.makedirs(logger_dir, exist_ok=True)
     wandb_logger = WandbLogger(
-        project="segmentation", save_dir=logger_dir,
-        name=f"MGCA_{args.dataset}_{args.data_pct}_{extension}")
+        project="segmentation",
+        save_dir=logger_dir,
+        name=f"MGCA_{args.dataset}_{args.data_pct}_{extension}",
+    )
     trainer = Trainer.from_argparse_args(
-        args=args,
-        callbacks=callbacks,
-        logger=wandb_logger)
+        args=args, callbacks=callbacks, logger=wandb_logger
+    )
 
     model.training_steps = model.num_training_steps(trainer, datamodule)
     print(model.training_steps)
     trainer.fit(model, datamodule=datamodule)
-    trainer.test(model, datamodule=datamodule, ckpt_path='best')
+    trainer.test(model, datamodule=datamodule, ckpt_path="best")
 
 
 if __name__ == "__main__":

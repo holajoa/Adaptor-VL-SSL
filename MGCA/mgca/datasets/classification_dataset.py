@@ -25,8 +25,14 @@ class BaseImageDataset(Dataset):
 
 
 class CheXpertImageDataset(BaseImageDataset):
-    def __init__(self, split="train", transform=None,
-                 img_type="Frontal", data_pct=0.01, imsize=256):
+    def __init__(
+        self,
+        split="train",
+        transform=None,
+        img_type="Frontal",
+        data_pct=0.01,
+        imsize=256,
+    ):
         super().__init__(split=split, transform=transform)
 
         if not os.path.exists(CHEXPERT_DATA_DIR):
@@ -54,8 +60,7 @@ class CheXpertImageDataset(BaseImageDataset):
 
         # get path
         self.df[CHEXPERT_PATH_COL] = self.df[CHEXPERT_PATH_COL].apply(
-            lambda x: os.path.join(
-                CHEXPERT_DATA_DIR, "/".join(x.split("/")[1:]))
+            lambda x: os.path.join(CHEXPERT_DATA_DIR, "/".join(x.split("/")[1:]))
         )
 
         # fill na with 0s
@@ -84,11 +89,19 @@ class CheXpertImageDataset(BaseImageDataset):
 
 
 class MIMICImageDataset(BaseImageDataset):
-    def __init__(self, split="train", transform=None, data_pct=1.0, img_type="Frontal", imsize=256):
+    def __init__(
+        self,
+        split="train",
+        transform=None,
+        data_pct=1.0,
+        img_type="Frontal",
+        imsize=256,
+    ):
         super().__init__(split, transform)
         if not os.path.exists(MIMIC_CXR_DATA_DIR):
             raise RuntimeError(
-                "MIMIC CXR data directory %s does not exist!" % MIMIC_CXR_DATA_DIR)
+                "MIMIC CXR data directory %s does not exist!" % MIMIC_CXR_DATA_DIR
+            )
 
         # read in csv file
         if split == "train":
@@ -109,8 +122,7 @@ class MIMICImageDataset(BaseImageDataset):
 
         # get path
         self.df[MIMIC_CXR_PATH_COL] = self.df[MIMIC_CXR_PATH_COL].apply(
-            lambda x: os.path.join(
-                MIMIC_CXR_DATA_DIR, "/".join(x.split("/")[1:]))
+            lambda x: os.path.join(MIMIC_CXR_DATA_DIR, "/".join(x.split("/")[1:]))
         )
 
         # fill na with 0s
@@ -140,8 +152,14 @@ class MIMICImageDataset(BaseImageDataset):
 
 
 class RSNAImageDataset(BaseImageDataset):
-    def __init__(self, split="train", transform=None,
-                 phase="classification", data_pct=0.01, imsize=256) -> None:
+    def __init__(
+        self,
+        split="train",
+        transform=None,
+        phase="classification",
+        data_pct=0.01,
+        imsize=256,
+    ) -> None:
         super().__init__(split=split, transform=transform)
 
         if not os.path.exists(RSNA_DATA_DIR):
@@ -160,7 +178,8 @@ class RSNAImageDataset(BaseImageDataset):
             self.df = self.df[self.df["Target"] == 1]
 
         self.df["Path"] = self.df["patientId"].apply(
-            lambda x: RSNA_IMG_DIR / (x + ".dcm"))
+            lambda x: RSNA_IMG_DIR / (x + ".dcm")
+        )
 
         if data_pct != 1 and self.split == "train":
             self.df = self.df.sample(frac=data_pct, random_state=42)
@@ -174,8 +193,7 @@ class RSNAImageDataset(BaseImageDataset):
         row = self.df.iloc[index]
         # get image
         img_path = row["Path"]
-        x = read_from_dicom(
-            img_path, self.imsize, self.transform)
+        x = read_from_dicom(img_path, self.imsize, self.transform)
         y = float(row["Target"])
         y = torch.tensor([y])
 
@@ -183,8 +201,9 @@ class RSNAImageDataset(BaseImageDataset):
 
 
 class COVIDXImageDataset(BaseImageDataset):
-    def __init__(self, split="train", transform=None,
-                 data_pct=0.01, imsize=256) -> None:
+    def __init__(
+        self, split="train", transform=None, data_pct=0.01, imsize=256
+    ) -> None:
         super().__init__(split=split, transform=transform)
 
         if not os.path.exists(COVIDX_DATA_DIR):
@@ -193,15 +212,18 @@ class COVIDXImageDataset(BaseImageDataset):
         if self.split == "train":
             self.df = pd.read_csv(COVIDX_TRAIN_CSV)
             self.df["filename"] = self.df["filename"].apply(
-                lambda x: COVIDX_DATA_DIR / f"train/{x}")
+                lambda x: COVIDX_DATA_DIR / f"train/{x}"
+            )
         elif self.split == "valid":
             self.df = pd.read_csv(COVIDX_VALID_CSV)
             self.df["filename"] = self.df["filename"].apply(
-                lambda x: COVIDX_DATA_DIR / f"train/{x}")
+                lambda x: COVIDX_DATA_DIR / f"train/{x}"
+            )
         elif self.split == "test":
             self.df = pd.read_csv(COVIDX_TEST_CSV)
             self.df["filename"] = self.df["filename"].apply(
-                lambda x: COVIDX_DATA_DIR / f"test/{x}")
+                lambda x: COVIDX_DATA_DIR / f"test/{x}"
+            )
         else:
             raise ValueError(f"split {split} does not exist!")
 

@@ -37,8 +37,7 @@ class DiceLoss(nn.Module):
         target = target.contiguous().view(target.shape[0], -1)
 
         num = torch.sum(torch.mul(predict, target), dim=1) + self.smooth
-        den = torch.sum(predict.pow(self.p) +
-                        target.pow(self.p), dim=1) + self.smooth
+        den = torch.sum(predict.pow(self.p) + target.pow(self.p), dim=1) + self.smooth
 
         loss = 1 - num / den
 
@@ -83,9 +82,9 @@ class MixedLoss(nn.Module):
         self.alpha = alpha
         self.focal = FocalLoss(gamma)
         if modified_dice_loss:
-            self.dice = DiceLoss(reduction="sum") 
+            self.dice = DiceLoss(reduction="sum")
         else:
-            self.dice = lambda input, target: - torch.log(dice_loss(input, target))
+            self.dice = lambda input, target: -torch.log(dice_loss(input, target))
 
     def forward(self, input, target):
         loss = self.alpha * self.focal(input, target) + self.dice(input, target)
