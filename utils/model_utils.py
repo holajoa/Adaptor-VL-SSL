@@ -5,12 +5,11 @@ import torch.nn as nn
 from pytorch_lightning.callbacks import TQDMProgressBar, Callback
 from pytorch_lightning import LightningModule
 
+from constants import WORKING_DIR
+
 from tqdm import tqdm
 import sys
 import os
-
-
-WORKING_DIR = "/vol/bitbucket/jq619/adaptor-thesis"
 
 
 def freeze_adaptor(model: LightningModule):

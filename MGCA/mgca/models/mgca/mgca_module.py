@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
+# from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 from dateutil import tz
 from einops import rearrange
 from pytorch_lightning import LightningModule, Trainer, seed_everything
@@ -394,20 +394,21 @@ class MGCA(LightningModule):
             betas=(self.hparams.momentum, 0.999),
             weight_decay=self.hparams.weight_decay
         )
-        lr_scheduler = CosineAnnealingWarmupRestarts(
-            optimizer,
-            first_cycle_steps=self.training_steps,
-            cycle_mult=1.0,
-            max_lr=self.hparams.learning_rate,
-            min_lr=1e-8,
-            warmup_steps=int(self.training_steps * 0.4)
-        )
-        scheduler = {
-            "scheduler": lr_scheduler,
-            "interval": "step",
-            "frequency": 1
-        }
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        # lr_scheduler = CosineAnnealingWarmupRestarts(
+        #     optimizer,
+        #     first_cycle_steps=self.training_steps,
+        #     cycle_mult=1.0,
+        #     max_lr=self.hparams.learning_rate,
+        #     min_lr=1e-8,
+        #     warmup_steps=int(self.training_steps * 0.4)
+        # )
+        # scheduler = {
+        #     "scheduler": lr_scheduler,
+        #     "interval": "step",
+        #     "frequency": 1
+        # }
+        # return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        return optimizer
 
     @staticmethod
     def add_model_specific_args(parent_parser):

@@ -9,6 +9,8 @@ trained_models_/*
 logs/*
 figs/*
 *.yaml
+*constants.py
+
 
 # Byte-compiled / optimized / DLL files
 data/*

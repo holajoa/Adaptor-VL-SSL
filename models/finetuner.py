@@ -192,21 +192,6 @@ class AdaptorFinetuner(LightningModule):
         )
         return {"optimizer": optimizer, "lr_scheduler": lr_schedule}
 
-        # lr_scheduler = CosineAnnealingWarmupRestarts(
-        #     optimizer,
-        #     first_cycle_steps=self.training_steps,
-        #     cycle_mult=1.0,
-        #     max_lr=self.hparams.learning_rate,
-        #     min_lr=0.0,
-        #     warmup_steps=int(self.training_steps * 0.4)
-        # )
-        # scheduler = {
-        #     "scheduler": lr_scheduler,
-        #     "interval": "step",
-        #     "frequency": 1
-        # }
-        # return {"optimizer": optimizer, "lr_scheduler": scheduler}
-
         return optimizer
 
     @staticmethod
