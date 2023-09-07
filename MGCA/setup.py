@@ -8,5 +8,5 @@ setup(
     version="0.1",
     packages=setuptools.find_packages(),
     author="Fuying Wang",
-    author_email="fuyingw@connect.hku.hk",
+    author_email="fuyingw@connect.hku.hk"
 )

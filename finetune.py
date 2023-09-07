@@ -90,6 +90,7 @@ def main(args):
         multilabel=dataset_cfg["multilabel"],
         freeze_adaptor=not args.unfreeze_adaptor,
     )
+    
     if args.disable_adaptor:
         model.adaptor = Identity()
         model.linear_layer = SSLEvaluator(

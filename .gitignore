@@ -7,8 +7,10 @@ saved_datasets/*
 trained_models/*
 trained_models_/*
 logs/*
-cpu_tests/*
 figs/*
+*.yaml
+*constants.py
+
 
 # Byte-compiled / optimized / DLL files
 data/*

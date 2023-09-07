@@ -19,7 +19,7 @@ import os
 import argparse
 
 
-# SAVED_EMBEDDINGS_DIR = '/vol/bitbucket/jq619/individual-project/saved_embeddings'
+# SAVED_EMBEDDINGS_DIR = '/vol/bitbucket/jq619/adaptor-thesis/saved_embeddings'
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -34,13 +34,13 @@ parser.add_argument(
 parser.add_argument(
     "--text_embeds_raw_dir",
     type=str,
-    default="/vol/bitbucket/jq619/individual-project/saved_embeddings/text_embeds",
+    default="/vol/bitbucket/jq619/adaptor-thesis/saved_embeddings/text_embeds",
     help="path to raw text embeddings",
 )
 parser.add_argument(
     "--image_embeds_raw_dir",
     type=str,
-    default="/vol/bitbucket/jq619/individual-project/saved_embeddings/image_embeds",
+    default="/vol/bitbucket/jq619/adaptor-thesis/saved_embeddings/image_embeds",
     help="path to raw image embeddings",
 )
 # parser.add_argument('--num_of_batches', type=int, default=100, help='number of batches to use for training')

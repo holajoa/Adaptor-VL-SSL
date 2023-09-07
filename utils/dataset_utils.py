@@ -159,7 +159,6 @@ def split_indices(n, num_shards, shuffle=False, seed=42):
     indices = np.random.permutation(n) if shuffle else np.arange(n)
     return np.array_split(indices, num_shards)
 
-
 def torch2huggingface_dataset(torch_dataset, num_shards=1, shuffle=False, seed=42):
     
     shards = split_indices(len(torch_dataset), num_shards, shuffle=shuffle, seed=seed)
@@ -171,7 +170,7 @@ def torch2huggingface_dataset(torch_dataset, num_shards=1, shuffle=False, seed=4
 
     return Dataset.from_generator(
         gen, gen_kwargs={"shard_indices": shards}, 
-        cache_dir="/vol/bitbucket/jq619/.cache/huggingface/datasets",
+        cache_dir="~/autodl-tmp/.cache/huggingface/datasets",
     )
 
 # def torch2huggingface_dataset(torch_dataset, shuffle=False, seed=42):
@@ -188,5 +187,6 @@ def torch2huggingface_dataset(torch_dataset, num_shards=1, shuffle=False, seed=4
 #     return Dataset.from_generator(
 #         gen,
 #         # streaming=True,
-#         cache_dir="/vol/bitbucket/jq619/.cache/huggingface/datasets",
+#         cache_dir="~/autodl-tmp/.cache/huggingface/datasets",
 #     )
+

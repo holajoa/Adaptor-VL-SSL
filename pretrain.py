@@ -69,10 +69,10 @@ def main(args):
     print(f"Number of training samples used: {len(train_dataset)}")
     print(f"Total number of training steps: {args.max_steps}")
 
-    # train_dataset = torch2huggingface_dataset(train_dataset, streaming=False)
+    # train_dataset = torch2huggingface_dataset(train_dataset)
     # train_dataset.with_format("torch")
 
-    # val_dataset = torch2huggingface_dataset(val_dataset, streaming=False)
+    # val_dataset = torch2huggingface_dataset(val_dataset)
     # val_dataset.with_format("torch")
 
     # Get dataloaders
@@ -98,7 +98,7 @@ def main(args):
     if args.wandb:
         wandb.login(key="b0236e7bef7b6a3789ca4f305406ab358812da3d")
         logger = WandbLogger(
-            project=f"adaptor_pretrain_{args.num_layers}_layers" if not args.project_name else args.project_name,
+             project=f"adaptor_pretrain_{args.num_layers}_layers" if not args.project_name else args.project_name,
             name=f"{args.vision_model}_{args.text_model}_{args.data_pct}",
             log_model="all",
             save_dir=args.output_dir,
