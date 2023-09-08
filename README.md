@@ -1,6 +1,7 @@
 # Freeze the backbones: A Parameter-Efficient Contrastive Approach to Robust Medical Vision-Language Pre-training
 *MSc Artificial Intelligence Thesis. Original title: **Using prior knowledge from big-frozen model to improve Vision-Language Self-Supervised Learning***
 
+![architecture](img/architecture_annotated.png)
 ## Code Structure
 
 ```
@@ -49,13 +50,13 @@ We use [MGCA](https://github.com/HKU-MedAI/MGCA) code at this stage.
 ### Dataset downloading
 Datasets we used are as follows:
 
-- MIMIC-CXR: We downloaded the MIMIC-CXR-JPG dataset as the radiographs. Paired medical reports can be downloaded in MIMIC-CXR.
+- MIMIC-CXR: We downloaded the [MIMIC-CXR-JPG](https://physionet.org/content/mimic-cxr-jpg/2.0.0/) dataset as the radiographs. Paired medical reports can be downloaded in [MIMIC-CXR](https://physionet.org/content/mimic-cxr/2.0.0/mimic-cxr-reports.zip).
 
-- RSNA: We used the stage 2 of RSNA dataset in Kaggle.
+- RSNA: We used the stage 2 of RSNA dataset in [Kaggle](https://www.kaggle.com/competitions/rsna-pneumonia-detection-challenge/data).
 
-- COVIDx: We used the version 65 of COVIDx dataset in Kaggle.
+- COVIDx: We used the version 5 of COVIDx dataset in [Kaggle](https://www.kaggle.com/datasets/andyczhao/covidx-cxr2). Compatible labels are found in the [COVID-Net](https://github.com/lindawangg/COVID-Net/tree/master/labels) repository. 
 
-- SIIM: We downloaded the stage 1 of SIIM dataset in Kaggle.
+- SIIM: We downloaded the stage 1 of SIIM dataset in [Kaggle](https://www.kaggle.com/competitions/siim-acr-pneumothorax-segmentation/data).
 
 After downloading datasets, please check if the path in `MGCA/mgca/constants.py` is correct.
  
