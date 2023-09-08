@@ -21,7 +21,7 @@ import argparse
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
-    "--vision_model", type=str, help="Choose from [resnet-ae, swin-base]"
+    "--vision_model", type=str, help="Choose from [resnet-ae, dinov2-s, dinov2-b]"
 )
 parser.add_argument(
     "--text_model",
@@ -43,7 +43,7 @@ parser.add_argument(
 )
 # parser.add_argument('--num_of_batches', type=int, default=100, help='number of batches to use for training')
 
-parser.add_argument("--batch_size", type=int, default=32)
+parser.add_argument("--batch_size", type=int, default=64)
 
 parser.add_argument(
     "--force_rebuild_dataset",
@@ -56,7 +56,7 @@ parser.add_argument("--num_workers", type=int, default=8)
 parser.add_argument(
     "--data_pct",
     type=float,
-    default=0.01,
+    default=1.0,
     help="percentage of data to use. If setting 1.0, then use all data with no shuffling",
 )
 parser.add_argument("--crop_size", type=int, default=224)
@@ -64,13 +64,7 @@ parser.add_argument("--crop_size", type=int, default=224)
 parser.add_argument(
     "--full", action="store_true", help="Compute global and local vision features."
 )
-
-# parser.add_argument('--num_hidden_layers', type=int, default=1, help='number of transformer layers to use in adaptor')
-# parser.add_argument('--projection_dim', type=int, default=768, help='dimension of projection head')
-
-# parser.add_argument('--lr', type=float, default=1e-4)
-# parser.add_argument('--num_train_epochs', type=int, default=1)
-parser.add_argument("--seed", type=int, default=1117)
+parser.add_argument("--seed", type=int, default=42)
 parser.add_argument(
     "--local_rank", default=-1, type=int, help="node rank for distributed training"
 )

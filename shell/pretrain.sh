@@ -11,7 +11,7 @@ export SAVED_MODEL_DIR="/vol/bitbucket/jq619/adaptor-thesis/trained_models/pretr
 export VISION_MODEL="dinov2-s"
 export TEXT_MODEL="biobert"
 
-for VISION_MODEL in "dinov2-b" # "resnet-ae" "dinov2-s"
+for VISION_MODEL in "dinov2-b" "resnet-ae" "dinov2-s"
 do
     for TEXT_MODEL in  "biobert" "clinicalbert" "cxrbert" "pubmedbert" "bert"
     do

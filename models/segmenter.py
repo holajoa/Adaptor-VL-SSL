@@ -21,7 +21,7 @@ class AdaptorSegmenter(LightningModule):
         self,
         seg_model: nn.Module,
         learning_rate: float = 5e-4,
-        weight_decay: float = 1e-6,
+        weight_decay: float = 1e-4,
         alpha: float = 10,
         modified_dice_loss: bool = True,
         *args,

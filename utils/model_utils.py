@@ -64,7 +64,7 @@ def load_vision_model(
 
 
 def get_newest_ckpt(
-    vision_model, text_model, wandb=False, project_name="adaptor pretrain", postfix=""
+    vision_model, text_model, project_name="adaptor_pretrain", postfix=""
 ):
     if postfix:
         postfix = f"_{postfix}"

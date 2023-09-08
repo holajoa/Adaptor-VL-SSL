@@ -24,7 +24,7 @@ class AdaptorFinetuner(LightningModule):
         hidden_dim: Optional[int] = None,
         dropout: float = 0.0,
         learning_rate: float = 5e-4,
-        weight_decay: float = 1e-6,
+        weight_decay: float = 1e-4,
         binary: bool = True,
         multilabel: bool = True,
         freeze_adaptor: bool = True,
