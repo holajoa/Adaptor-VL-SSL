@@ -1,8 +1,9 @@
 # Freeze the backbones: A Parameter-Efficient Contrastive Approach to Robust Medical Vision-Language Pre-training
-*MSc Artificial Intelligence Thesis. Original title: **Using prior knowledge from big-frozen model to improve Vision-Language Self-Supervised Learning***
+*MSc Artificial Intelligence Thesis. Original title: Using prior knowledge from big-frozen model to improve Vision-Language Self-Supervised Learning*
+We present the Adaptor framework, a parameter-efficient Vision-language Self-Supervised Learning method for enhanced medical vision representation learning. The Adaptor framework freezes pre-trained dual encoders and employs a backbone-agnostic module with cross-attention for intermodality fusion. This approach is computationally efficient, preserves the depth of medical knowledge from each individual encoder and synergises them to curate enriched, general-purpose medical features.
 
 ![architecture](img/architecture_annotated.png)
-## Code Structure
+<!-- ## Code Structure
 
 ```
 adaptor
@@ -26,7 +27,7 @@ adaptor
 │   ├── segment-rsna.sh
 │   └── segment-siim.sh
 ├── utils/
-│   ├── args.py    # Training argument parser
+│   ├── args.py    #                                        Training argument parser
 │   ├── dataset_utils.py    # Util functions for datasets
 │   ├── model_utils.py    # Util functions for models
 │   └── utils.py    # Other util functions
@@ -36,7 +37,7 @@ adaptor
 ├── segment.py    # run downstream segmetation tuning
 ├── requirements.txt    # Required packages  
 └── README.md
-```
+``` -->
 
 ## Install required packages
 
