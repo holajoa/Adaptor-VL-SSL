@@ -1,6 +1,7 @@
 # Freeze the backbones: A Parameter-Efficient Contrastive Approach to Robust Medical Vision-Language Pre-training
-*MSc Artificial Intelligence Thesis. Original title: Using prior knowledge from big-frozen model to improve Vision-Language Self-Supervised Learning*
-We present the Adaptor framework, a parameter-efficient Vision-language Self-Supervised Learning method for enhanced medical vision representation learning. The Adaptor framework freezes pre-trained dual encoders and employs a backbone-agnostic module with cross-attention for intermodality fusion. This approach is computationally efficient, preserves the depth of medical knowledge from each individual encoder and synergises them to curate enriched, general-purpose medical features.
+MSc Artificial Intelligence Thesis. [[pdf](https://drive.google.com/file/d/1Pd9hOVO5FebXm87JE0yqdUaCcZbVSOO5/view?usp=sharing)] 
+
+We present the Adaptor framework, a **parameter-efficient Vision-language Self-Supervised Learning method for enhanced medical vision representation learning**. The Adaptor framework freezes pre-trained dual encoders and employs a backbone-agnostic module with cross-attention for intermodality fusion. This approach is computationally efficient, preserves the depth of medical knowledge from each individual encoder and synergises them to curate enriched, general-purpose medical features.
 
 ![architecture](img/architecture_annotated.png)
 <!-- ## Code Structure
