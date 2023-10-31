@@ -23,13 +23,14 @@ class AdaptorSegmenter(LightningModule):
         learning_rate: float = 5e-4,
         weight_decay: float = 1e-6,
         alpha: float = 10,
+        modified_dice_loss:bool = True, 
         *args,
         **kwargs,
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["seg_model"])
         self.model = seg_model
-        self.loss = MixedLoss(alpha=alpha)
+        self.loss = MixedLoss(alpha=alpha, modified_dice_loss=modified_dice_loss)
         self.metric_name = "dice"
         self.alpha = alpha
 
@@ -134,7 +135,7 @@ class AdaptorSegmenter(LightningModule):
         # return optimizer
         lr_schedule = CosineAnnealingWarmRestarts(
             optimizer=optimizer,
-            T_0=80,
+            T_0=100,
             T_mult=1,
             eta_min=1e-8,
         )

@@ -5,6 +5,8 @@ import torch.nn as nn
 from pytorch_lightning.callbacks import TQDMProgressBar, Callback
 from pytorch_lightning import LightningModule
 
+from constants import WORKING_DIR
+
 from tqdm import tqdm
 import sys
 import os
@@ -64,7 +66,14 @@ def load_vision_model(
 def get_newest_ckpt(vision_model, text_model, wandb=False, project_name="adaptor pretrain", postfix=""):
     if postfix:
         postfix = f"_{postfix}"
+<<<<<<< HEAD
     base_dir = f"/root/adaptor-thesis/trained_models/pretrain/{vision_model}_{text_model}{postfix}/{project_name}/"
+=======
+    base_dir = os.path.join(
+        WORKING_DIR, 
+        f"trained_models/pretrain/{vision_model}_{text_model}{postfix}/{project_name}/",
+    )
+>>>>>>> 1c83f5c387ded7b17e35c4b09c8401035e3ef837
     base_dir = os.path.join(
         [os.path.abspath(os.path.join(base_dir, p)) for p in os.listdir(base_dir)][-1],
         "checkpoints",

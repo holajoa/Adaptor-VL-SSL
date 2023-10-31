@@ -2,14 +2,22 @@
 #SBATCH  --gpus-per-node=2
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jq619
+<<<<<<< HEAD
 #SBATCH --output=/vol/bitbucket/jq619/individual-project/slurm_outputs/finetune-sweep-%j.out
+=======
+#SBATCH --output=/vol/bitbucket/jq619/adaptor-thesis/slurm_outputs/finetune-sweep-%j.out
+>>>>>>> 1c83f5c387ded7b17e35c4b09c8401035e3ef837
 export PATH=/vol/bitbucket/jq619/idv/bin/:$PATH
 source activate
 source /vol/cuda/11.3.1-cudnn8.2.1/setup.sh
 TERM=vt100 # or TERM=xterm
 export WANDB_DIR=/vol/bitbucket/jq619/
 export WANDB_DATA_DIR=/vol/bitbucket/jq619/wandb/
+<<<<<<< HEAD
 export SAVED_MODEL_DIR="/vol/bitbucket/jq619/individual-project/trained_models/clf_sweep"
+=======
+export SAVED_MODEL_DIR="/vol/bitbucket/jq619/adaptor-thesis/trained_models/clf_sweep"
+>>>>>>> 1c83f5c387ded7b17e35c4b09c8401035e3ef837
 export DATASET="covidx"
 export MAX_EPOCHS=200
 export DATA_PCT=1.

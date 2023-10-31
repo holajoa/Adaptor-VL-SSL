@@ -72,7 +72,7 @@ class AdaptorFinetuner(LightningModule):
         self.model_name = model_name
         self.text_model_name = text_model_name
         if self.text_model_name is not None:
-            store_path = "/vol/bitbucket/jq619/individual-project/saved_embeddings/dummy_text_embeds"
+            store_path = "/vol/bitbucket/jq619/adaptor-thesis/saved_embeddings/dummy_text_embeds"
             self.dummy_text = torch.from_numpy(torch.load(os.path.join(store_path, self.text_model_name + ".pt")))
         self.binary = binary
         self.multilabel = multilabel
@@ -191,21 +191,6 @@ class AdaptorFinetuner(LightningModule):
             eta_min=1e-8,
         )
         return {"optimizer": optimizer, "lr_scheduler": lr_schedule}
-
-        # lr_scheduler = CosineAnnealingWarmupRestarts(
-        #     optimizer,
-        #     first_cycle_steps=self.training_steps,
-        #     cycle_mult=1.0,
-        #     max_lr=self.hparams.learning_rate,
-        #     min_lr=0.0,
-        #     warmup_steps=int(self.training_steps * 0.4)
-        # )
-        # scheduler = {
-        #     "scheduler": lr_scheduler,
-        #     "interval": "step",
-        #     "frequency": 1
-        # }
-        # return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
         return optimizer
 

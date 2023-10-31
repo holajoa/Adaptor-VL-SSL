@@ -2,14 +2,14 @@
 #SBATCH  --gpus-per-node=2
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jq619
-#SBATCH --output=/vol/bitbucket/jq619/individual-project/slurm_outputs/finetune-%j.out
+#SBATCH --output=/vol/bitbucket/jq619/adaptor-thesis/slurm_outputs/finetune-%j.out
 export PATH=/vol/bitbucket/jq619/idv/bin/:$PATH
 source activate
 source /vol/cuda/11.3.1-cudnn8.2.1/setup.sh
 TERM=vt100 # or TERM=xterm
 export WANDB_DIR=/vol/bitbucket/jq619/
 export WANDB_DATA_DIR=/vol/bitbucket/jq619/wandb/
-export SAVED_MODEL_DIR="/vol/bitbucket/jq619/individual-project/trained_models/clf"
+export SAVED_MODEL_DIR="/vol/bitbucket/jq619/adaptor-thesis/trained_models/clf"
 export DATASET="rsna"
 export DATA_PCT=1
 export LR=5e-5

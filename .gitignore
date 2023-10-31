@@ -6,6 +6,11 @@ saved_datasets/*
 *.out
 trained_models/*
 trained_models_/*
+logs/*
+figs/*
+*.yaml
+*constants.py
+
 
 # Byte-compiled / optimized / DLL files
 data/*
