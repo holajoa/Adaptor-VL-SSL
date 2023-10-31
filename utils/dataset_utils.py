@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, Dataset
 import numpy as np
 from transformers import ViTImageProcessor
 
-from typing import Union
+from typing import Union, Dict
 
 from pathlib import Path
 
@@ -100,7 +100,7 @@ class BatchedXRayCenterCrop(object):
 
 def ae_image_processor(
     imgs: np.ndarray, return_dict=True
-) -> Union[torch.Tensor, dict[str, torch.Tensor]]:
+) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
     imgs = xrv.datasets.normalize(imgs, 255)
 
     # Check that images are 2D arrays

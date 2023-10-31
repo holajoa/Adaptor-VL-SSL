@@ -1,12 +1,3 @@
-#!/bin/bash
-#SBATCH  --gpus-per-node=2
-#SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=jq619
-#SBATCH --output=/vol/bitbucket/jq619/individual-project/slurm_outputs/segment-%j.out
-export PATH=/vol/bitbucket/jq619/idv/bin/:$PATH
-source activate
-source /vol/cuda/11.3.1-cudnn8.2.1/setup.sh
-TERM=vt100 # or TERM=xterm
 export WANDB_DIR=/vol/bitbucket/jq619/
 export WANDB_DATA_DIR=/vol/bitbucket/jq619/wandb/
 export SAVED_MODEL_DIR="/vol/bitbucket/jq619/individual-project/trained_models/segment"
@@ -23,5 +14,3 @@ do
         wandb artifact cache cleanup 1GB
     done
 done
-/usr/bin/nvidia-smi
-uptime
